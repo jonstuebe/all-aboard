@@ -399,6 +399,20 @@ const scheduleReconnect = (model: Model, game: OnlineGame): UpdateReturn =>
       }
     : { model }
 
+const turnKey = (snapshot: GameSnapshot): string =>
+  snapshot._tag === 'Table'
+    ? `${snapshot.view.phase._tag}:${snapshot.view.currentPlayerIndex}`
+    : snapshot._tag
+
+// NOTE: A rejected-move notice ("It's not your turn.") describes the turn it
+// was sent in. Once the turn moves on, it is stale, so the next snapshot from
+// a different turn clears it.
+const turnChanged = (
+  maybePrevious: Option.Option<GameSnapshot>,
+  next: GameSnapshot,
+): boolean =>
+  !Option.exists(maybePrevious, previous => turnKey(previous) === turnKey(next))
+
 const receiveServerMessage = (
   model: Model,
   game: OnlineGame,
@@ -432,10 +446,13 @@ const receiveServerMessage = (
             () => game.joinTone,
           )
         : game.joinTone
+      const updatedGame = turnChanged(game.maybeSnapshot, snapshot)
+        ? withNotice(game, Option.none())
+        : game
       return {
         model: withOnlineGame(
           model,
-          modifyFields(game, {
+          modifyFields(updatedGame, {
             maybeSnapshot: () => Option.some(snapshot),
             connection: () => Connection.Open(),
             joinTone: () => freeTone,
