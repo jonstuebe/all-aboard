@@ -34,6 +34,10 @@ export type LobbySeat = typeof LobbySeat.Type
 
 // SNAPSHOT
 
+// NOTE: WatchLobby and WatchTable go only to a table screen: a device that
+// opened /g/CODE/watch and holds no seat in what it sees. It gets public
+// information only. Each seat's tickets are revealed once the game is over.
+
 export const GameSnapshot = defineTaggedUnion({
   Lobby: {
     code: Schema.String,
@@ -47,6 +51,16 @@ export const GameSnapshot = defineTaggedUnion({
     view: ClientView,
     maybePingAvailableAt: Schema.Option(Schema.Number),
     canPing: Schema.Boolean,
+  },
+  WatchLobby: {
+    code: Schema.String,
+    seats: Schema.Array(LobbySeat),
+    isRematch: Schema.Boolean,
+  },
+  WatchTable: {
+    code: Schema.String,
+    view: ClientView,
+    revealedTickets: Schema.Array(Schema.Array(Schema.String)),
   },
   Closed: { code: Schema.String, reason: Schema.String },
   Gone: { code: Schema.String, reason: Schema.String },

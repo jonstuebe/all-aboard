@@ -5,6 +5,7 @@ import { defineRouteUnion, literal, slash, string } from 'foldkit/route'
 export const AppRoute = defineRouteUnion({
   Home: {},
   Game: { code: Schema.String },
+  Watch: { code: Schema.String },
   NotFound: { path: Schema.String },
 })
 export type AppRoute = typeof AppRoute.Type
@@ -17,10 +18,19 @@ const gameRouter = pipe(
   Route.mapTo(AppRoute.Game),
 )
 
+const watchRouter = pipe(
+  literal('g'),
+  slash(string('code')),
+  slash(literal('watch')),
+  Route.mapTo(AppRoute.Watch),
+)
+
 export const urlToAppRoute = Route.parseUrlWithFallback(
-  Route.oneOf(gameRouter, homeRouter),
+  Route.oneOf(watchRouter, gameRouter, homeRouter),
   AppRoute.NotFound,
 )
 
 export const gamePath = (code: string): string =>
   `/g/${encodeURIComponent(code)}`
+
+export const watchPath = (code: string): string => `${gamePath(code)}/watch`

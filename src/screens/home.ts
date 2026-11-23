@@ -333,6 +333,25 @@ const joinStep = (home: Home, inputs: HomeInputs, h: H): Html =>
         h.button([h.Class('btn btn-blue'), h.Type('submit')], ['Join']),
       ],
     ),
+    h.div(
+      [h.Class('wizard-watch')],
+      [
+        h.p(
+          [h.Class('wizard-watch-hint')],
+          [
+            'On an iPad or laptop everyone can see? Watch the game here instead of taking a seat.',
+          ],
+        ),
+        h.button(
+          [
+            h.Class('btn btn-cream btn-block'),
+            h.Type('button'),
+            h.OnClick(Message.ClickedWatchCode()),
+          ],
+          ['Watch as table screen'],
+        ),
+      ],
+    ),
     createError(home, h),
     footer(home, inputs, h),
   ])

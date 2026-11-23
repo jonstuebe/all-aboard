@@ -88,10 +88,11 @@ export type TestClient = Readonly<{
 export const connect = async (
   device: Device,
   code: string,
+  isWatching = false,
 ): Promise<TestClient> => {
   const response = await worker.fetch(
     new Request(
-      `http://local/api/games/${code}/ws?device=${device.deviceId}&secret=${device.secret}`,
+      `http://local/api/games/${code}/ws?device=${device.deviceId}&secret=${device.secret}${isWatching ? '&watch=1' : ''}`,
       { headers: { Upgrade: 'websocket' } },
     ),
   )

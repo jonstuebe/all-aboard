@@ -12,6 +12,8 @@ import {
   decodeServerMessage,
   encodeClientMessage,
 } from './protocol'
+import { Recap, idleRecap } from './recap'
+import { SoundSetting } from './soundSetting'
 import { TableUi, emptyTableUi } from './table'
 
 // MODEL
@@ -23,8 +25,14 @@ export const Connection = defineTaggedUnion({
 })
 export type Connection = typeof Connection.Type
 
+// NOTE: A Watcher is a table screen: it connects with ?watch=1, gets only
+// WatchLobby and WatchTable snapshots, and sends nothing.
+export const OnlineRole = Schema.Literals(['Player', 'Watcher'])
+export type OnlineRole = typeof OnlineRole.Type
+
 export const OnlineGame = Schema.Struct({
   code: Schema.String,
+  role: OnlineRole,
   connection: Connection,
   attempt: Schema.Number,
   maybeSnapshot: Schema.Option(GameSnapshot),
@@ -34,14 +42,18 @@ export const OnlineGame = Schema.Struct({
   isPinging: Schema.Boolean,
   isConfirmingLeave: Schema.Boolean,
   isCodeCopied: Schema.Boolean,
+  recap: Recap,
+  sound: SoundSetting,
 })
 export type OnlineGame = typeof OnlineGame.Type
 
 export const openOnlineGame = (
   code: string,
   playerName: string,
+  role: OnlineRole = 'Player',
 ): OnlineGame => ({
   code,
+  role,
   connection: Connection.Connecting(),
   attempt: 0,
   maybeSnapshot: Option.none(),
@@ -51,6 +63,8 @@ export const openOnlineGame = (
   isPinging: false,
   isConfirmingLeave: false,
   isCodeCopied: false,
+  recap: idleRecap,
+  sound: 'Off',
 })
 
 export const withNotice = (
@@ -82,20 +96,23 @@ export const SocketRequirements = Schema.Option(
     code: Schema.String,
     attempt: Schema.Number,
     device: Device,
+    isWatching: Schema.Boolean,
   }),
 )
 
 export const acquireGameSocket = ({
   code,
   device,
+  isWatching,
 }: {
   code: string
   attempt: number
   device: Device
+  isWatching: boolean
 }) =>
   Effect.suspend(() =>
     Effect.callback<WebSocket, Error>(resume => {
-      const socket = new WebSocket(socketUrl(device, code))
+      const socket = new WebSocket(socketUrl(device, code, isWatching))
       const handleOpen = () => {
         socket.removeEventListener('error', handleError)
         resume(Effect.succeed(socket))

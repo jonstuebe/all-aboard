@@ -81,11 +81,16 @@ export const authHeaders = (device: Device): Record<string, string> => ({
   [DEVICE_SECRET_HEADER]: device.secret,
 })
 
-export const socketUrl = (device: Device, code: string): string => {
+export const socketUrl = (
+  device: Device,
+  code: string,
+  isWatching: boolean,
+): string => {
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
   const query = new URLSearchParams({
     device: device.deviceId,
     secret: device.secret,
+    ...(isWatching ? { watch: '1' } : {}),
   })
   return `${protocol}//${location.host}/api/games/${encodeURIComponent(code)}/ws?${query.toString()}`
 }

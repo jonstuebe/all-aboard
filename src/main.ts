@@ -3,6 +3,7 @@ import {
   Clock,
   Duration,
   Effect,
+  Array as EffectArray,
   Match,
   Option,
   Random,
@@ -61,6 +62,7 @@ import {
   GameSocket,
   type GameSocketService,
   OnlineGame,
+  type OnlineRole,
   SocketRequirements,
   WaitToReconnect,
   acquireGameSocket,
@@ -86,7 +88,16 @@ import {
   NotificationStatus,
   notificationsView,
 } from './push'
-import { AppRoute, gamePath, urlToAppRoute } from './route'
+import {
+  type RecapStep,
+  RequestFullscreen,
+  continueTour,
+  idleRecap,
+  showScoreboard,
+  spotlight,
+  startTour,
+} from './recap'
+import { AppRoute, gamePath, urlToAppRoute, watchPath } from './route'
 import {
   CreateState,
   Home,
@@ -100,8 +111,25 @@ import {
 } from './screens/home'
 import { lobbyView, messageScreen } from './screens/lobby'
 import { menuView } from './screens/menu'
+import { watchLobbyView, watchTableView } from './screens/watch'
 import { TableMode, type TableUi, makeTable } from './table'
+import {
+  AudioOutput,
+  type AudioOutputService,
+  AudioRequirements,
+  PlaySounds,
+  acquireAudio,
+  gameCues,
+  recapCues,
+  releaseAudio,
+} from './sound'
 import { tableView } from './view'
+import {
+  ScreenWakeLock,
+  WakeLockRequirements,
+  acquireWakeLock,
+  releaseWakeLock,
+} from './wakeLock'
 
 export { Message } from './message'
 
@@ -255,7 +283,11 @@ export const CopyInviteCode = Command.define('CopyInviteCode', {
 
 // UPDATE
 
-type UpdateReturn = Update.Return<Model, Message, GameSocketService>
+type UpdateReturn = Update.Return<
+  Model,
+  Message,
+  GameSocketService | AudioOutputService
+>
 
 const withScreen = (model: Model, screen: Screen): Model =>
   modifyFields(model, { screen: () => screen })
@@ -277,14 +309,24 @@ const screenForRoute = (model: Model, route: AppRoute): Screen =>
         ? model.screen
         : Screen.Home({ home: homeFor(model.playerName) }),
     NotFound: () => Screen.Home({ home: homeFor(model.playerName) }),
-    Game: ({ code }) => {
-      const normalized = normalizeCode(code)
-      return model.screen._tag === 'Online' &&
-        model.screen.game.code === normalized
-        ? model.screen
-        : Screen.Online({ game: openOnlineGame(normalized, model.playerName) })
-    },
+    Game: ({ code }) => onlineScreenFor(model, code, 'Player'),
+    Watch: ({ code }) => onlineScreenFor(model, code, 'Watcher'),
   })
+
+const onlineScreenFor = (
+  model: Model,
+  code: string,
+  role: OnlineRole,
+): Screen => {
+  const normalized = normalizeCode(code)
+  return model.screen._tag === 'Online' &&
+    model.screen.game.code === normalized &&
+    model.screen.game.role === role
+    ? model.screen
+    : Screen.Online({
+        game: openOnlineGame(normalized, model.playerName, role),
+      })
+}
 
 // LOCAL TABLE
 
@@ -343,10 +385,57 @@ const sendFromOnline = (
   model: Model,
   game: OnlineGame,
   message: ClientMessage,
-): UpdateReturn => ({
-  model: withOnlineGame(model, withNotice(game, Option.none())),
-  commands: [sendToServer(message)],
-})
+): UpdateReturn =>
+  game.role === 'Watcher'
+    ? { model }
+    : {
+        model: withOnlineGame(model, withNotice(game, Option.none())),
+        commands: [sendToServer(message)],
+      }
+
+// NOTE: A table screen starts its end-of-game tour the first time it sees a
+// finished game, and forgets it when a rematch brings the lobby back.
+const recapOnSnapshot = (
+  model: Model,
+  game: OnlineGame,
+  snapshot: GameSnapshot,
+): UpdateReturn => {
+  const isOver =
+    snapshot._tag === 'WatchTable' && snapshot.view.phase._tag === 'GameOver'
+  if (isOver && game.recap.stage._tag === 'Idle') {
+    const tour = startTour(game.recap)
+    return withRecapStep(model, game, tour)
+  }
+  return !isOver && game.recap.stage._tag !== 'Idle'
+    ? {
+        model: withOnlineGame(
+          model,
+          modifyFields(game, { recap: () => idleRecap }),
+        ),
+      }
+    : { model }
+}
+
+const withRecapStep = (
+  model: Model,
+  game: OnlineGame,
+  step: RecapStep,
+): UpdateReturn => {
+  const nextModel = withOnlineGame(
+    model,
+    modifyFields(game, { recap: () => step.recap }),
+  )
+  return step.commands === undefined
+    ? { model: nextModel }
+    : { model: nextModel, commands: step.commands }
+}
+
+const watchedPlayerCount = (game: OnlineGame): number =>
+  Option.match(game.maybeSnapshot, {
+    onNone: () => 0,
+    onSome: snapshot =>
+      snapshot._tag === 'WatchTable' ? snapshot.view.players.length : 0,
+  })
 
 const onOnline = (
   model: Model,
@@ -450,23 +539,50 @@ const receiveServerMessage = (
       const updatedGame = turnChanged(game.maybeSnapshot, snapshot)
         ? withNotice(game, Option.none())
         : game
-      return {
-        model: withOnlineGame(
-          model,
-          modifyFields(updatedGame, {
-            maybeSnapshot: () => Option.some(snapshot),
-            connection: () => Connection.Open(),
-            joinTone: () => freeTone,
-            isPinging: () => false,
-          }),
-        ),
-      }
+      const nextGame = modifyFields(updatedGame, {
+        maybeSnapshot: () => Option.some(snapshot),
+        connection: () => Connection.Open(),
+        joinTone: () => freeTone,
+        isPinging: () => false,
+      })
+      return recapOnSnapshot(
+        withOnlineGame(model, nextGame),
+        nextGame,
+        snapshot,
+      )
     },
   })
 
+// NOTE: Join and Watch both start from the code typed on the home screen;
+// they differ only in which page they open.
+const goToCode = (
+  model: Model,
+  pathFor: (code: string) => string,
+): UpdateReturn => {
+  if (model.screen._tag !== 'Home') {
+    return { model }
+  }
+  const code = normalizeCode(model.screen.home.joinCode)
+  return isValidCode(code)
+    ? { model, commands: [Navigate({ url: pathFor(code) })] }
+    : {
+        model: withScreen(
+          model,
+          Screen.Home({
+            home: modifyFields(model.screen.home, {
+              create: () =>
+                CreateState.Failed({
+                  reason: 'Invite codes look like TRAIN-4K7.',
+                }),
+            }),
+          }),
+        ),
+      }
+}
+
 const MARKET_KEYS = ['1', '2', '3', '4', '5']
 
-export const update = (model: Model, message: Message) =>
+const updateModel = (model: Model, message: Message) =>
   Message.match<UpdateReturn>(message, {
     // ROUTING
 
@@ -589,27 +705,76 @@ export const update = (model: Model, message: Message) =>
           }
         : { model },
 
-    SubmittedJoinCode: () => {
-      if (model.screen._tag !== 'Home') {
-        return { model }
-      }
-      const code = normalizeCode(model.screen.home.joinCode)
-      return isValidCode(code)
-        ? { model, commands: [Navigate({ url: gamePath(code) })] }
-        : {
-            model: withScreen(
-              model,
-              Screen.Home({
-                home: modifyFields(model.screen.home, {
-                  create: () =>
-                    CreateState.Failed({
-                      reason: 'Invite codes look like TRAIN-4K7.',
-                    }),
-                }),
-              }),
-            ),
-          }
-    },
+    SubmittedJoinCode: () => goToCode(model, gamePath),
+
+    ClickedWatchCode: () => goToCode(model, watchPath),
+
+    // TABLE SCREEN
+
+    CompletedWaitForRecap: ({ run, position }) =>
+      onOnline(model, game => {
+        const tour = continueTour(
+          game.recap,
+          run,
+          position,
+          watchedPlayerCount(game),
+        )
+        return withRecapStep(model, game, tour)
+      }),
+
+    ClickedRecapPlayer: ({ playerIndex }) =>
+      onOnline(model, game => ({
+        model: withOnlineGame(
+          model,
+          modifyFields(game, { recap: recap => spotlight(recap, playerIndex) }),
+        ),
+      })),
+
+    ClickedRecapScores: () =>
+      onOnline(model, game => ({
+        model: withOnlineGame(
+          model,
+          modifyFields(game, { recap: showScoreboard }),
+        ),
+      })),
+
+    ClickedReplayRecap: () =>
+      onOnline(model, game => {
+        const tour = startTour(game.recap)
+        return withRecapStep(model, game, tour)
+      }),
+
+    ClickedFullscreen: () => ({ model, commands: [RequestFullscreen()] }),
+
+    CompletedRequestFullscreen: () => ({ model }),
+
+    AcquiredWakeLock: () => ({ model }),
+
+    ReleasedWakeLock: () => ({ model }),
+
+    FailedWakeLock: () => ({ model }),
+
+    ClickedSound: ({ setting }) =>
+      onOnline(model, game => ({
+        model: withOnlineGame(
+          model,
+          modifyFields(game, { sound: () => setting }),
+        ),
+      })),
+
+    CompletedPlaySounds: () => ({ model }),
+
+    AcquiredAudio: () => ({ model }),
+
+    ReleasedAudio: () => ({ model }),
+
+    FailedAudio: () =>
+      onOnline(model, game => ({
+        model: withOnlineGame(
+          model,
+          modifyFields(game, { sound: () => 'Off' }),
+        ),
+      })),
 
     // TABLE
 
@@ -950,6 +1115,69 @@ export const update = (model: Model, message: Message) =>
       })),
   })
 
+// NOTE: Sound is worked out from what changed, not from which Message
+// arrived, so a snapshot, a tour step or a tap all get their cues the same
+// way. Only a table screen with sound on plays anything.
+const watchedTable = (model: Model) => {
+  if (model.screen._tag !== 'Online') {
+    return Option.none()
+  }
+  const game = model.screen.game
+  return game.role === 'Watcher' && game.sound === 'On'
+    ? Option.flatMap(game.maybeSnapshot, snapshot =>
+        snapshot._tag === 'WatchTable'
+          ? Option.some({ game, table: snapshot })
+          : Option.none(),
+      )
+    : Option.none()
+}
+
+const soundCommands = (before: Model, after: Model) =>
+  Option.match(
+    Option.zipWith(watchedTable(before), watchedTable(after), (was, now) => ({
+      was,
+      now,
+    })),
+    {
+      onNone: () => [],
+      onSome: ({ was, now }) => {
+        if (was.game.code !== now.game.code) {
+          return []
+        }
+        const game = gameCues(was.table.view, now.table.view)
+        const recap =
+          now.table.view.phase._tag === 'GameOver'
+            ? recapCues(
+                was.game.recap,
+                now.game.recap,
+                now.table.view,
+                now.table.revealedTickets,
+                now.table.view.phase.standings,
+              )
+            : []
+        return [
+          ...(EffectArray.isReadonlyArrayNonEmpty(game)
+            ? [PlaySounds({ channel: 'Game', cues: game })]
+            : []),
+          ...(EffectArray.isReadonlyArrayNonEmpty(recap)
+            ? [PlaySounds({ channel: 'Recap', cues: recap })]
+            : []),
+        ]
+      },
+    },
+  )
+
+export const update = (model: Model, message: Message): UpdateReturn => {
+  const updated = updateModel(model, message)
+  const sounds = soundCommands(model, updated.model)
+  return EffectArray.isArrayNonEmpty(sounds)
+    ? {
+        model: updated.model,
+        commands: [...(updated.commands ?? []), ...sounds],
+      }
+    : updated
+}
+
 // INIT
 
 export const init: Runtime.RoutingApplicationInit<Model, Message, Flags> = (
@@ -990,6 +1218,7 @@ export const managedResources = ManagedResource.make<Model, Message>()(
               code: model.screen.game.code,
               attempt: model.screen.game.attempt,
               device: model.device,
+              isWatching: model.screen.game.role === 'Watcher',
             })
           : Option.none(),
       acquire: acquireGameSocket,
@@ -1000,6 +1229,34 @@ export const managedResources = ManagedResource.make<Model, Message>()(
         Message.FailedConnectGameSocket({
           error: error instanceof Error ? error.message : 'Unknown error',
         }),
+    }),
+    audio: entry(AudioRequirements, {
+      resource: AudioOutput,
+      modelToMaybeRequirements: model =>
+        model.screen._tag === 'Online' &&
+        model.screen.game.role === 'Watcher' &&
+        model.screen.game.sound === 'On'
+          ? Option.some({ code: model.screen.game.code })
+          : Option.none(),
+      acquire: acquireAudio,
+      release: releaseAudio,
+      onAcquired: () => Message.AcquiredAudio(),
+      onReleased: () => Message.ReleasedAudio(),
+      onAcquireError: () => Message.FailedAudio(),
+    }),
+    wakeLock: entry(WakeLockRequirements, {
+      resource: ScreenWakeLock,
+      modelToMaybeRequirements: model =>
+        model.screen._tag === 'Online' &&
+        model.screen.game.role === 'Watcher' &&
+        wantsSocket(model.screen.game)
+          ? Option.some({ code: model.screen.game.code })
+          : Option.none(),
+      acquire: acquireWakeLock,
+      release: releaseWakeLock,
+      onAcquired: () => Message.AcquiredWakeLock(),
+      onReleased: () => Message.ReleasedWakeLock(),
+      onAcquireError: () => Message.FailedWakeLock(),
     }),
   }),
 )
@@ -1046,7 +1303,7 @@ export const subscriptions = Subscription.make<
         socketKey:
           model.screen._tag === 'Online' &&
           model.screen.game.connection._tag === 'Open'
-            ? `${model.screen.game.code}#${model.screen.game.attempt}`
+            ? `${model.screen.game.role}:${model.screen.game.code}#${model.screen.game.attempt}`
             : '',
       }),
       dependenciesToStream: ({ socketKey }) =>
@@ -1093,6 +1350,11 @@ const onlineView = (
             ),
             h,
           ),
+        WatchLobby: lobby => ({
+          title: `${lobby.code} · Table screen`,
+          body: watchLobbyView(lobby, game.sound, h),
+        }),
+        WatchTable: table => watchTableView(table, game.recap, game.sound, h),
         Closed: ({ reason }) => ({
           title: 'All Aboard',
           body: messageScreen(reason, `Invite code ${game.code}.`, h),

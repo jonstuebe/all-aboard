@@ -5,6 +5,7 @@ import { Message } from '../message'
 import { MAX_SEATS, MIN_SEATS, TONE_COUNT } from '../model'
 import type { OnlineGame } from '../online'
 import { type LobbySeat, NAME_MAX_LENGTH } from '../protocol'
+import { watchPath } from '../route'
 import { screenFrame } from './frame'
 
 type LobbySnapshot = Readonly<{
@@ -280,6 +281,14 @@ const inviteBlock = (
           h.OnClick(Message.ClickedShareInvite()),
         ],
         ['Share invite link'],
+      ),
+      h.p(
+        [h.Class('invite-watch')],
+        [
+          'Table screen: on an iPad or laptop, enter this code and choose Watch, or open ',
+          h.a([h.Href(watchPath(lobby.code))], ['the watch page']),
+          '.',
+        ],
       ),
     ],
   )

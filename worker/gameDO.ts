@@ -38,6 +38,7 @@ import {
   runAlarm,
   seatedDeviceIds,
   snapshotFor,
+  watchSnapshotFor,
 } from './room'
 import { writeTombstone } from './tombstone'
 
@@ -49,8 +50,9 @@ import { writeTombstone } from './tombstone'
 export const VERIFIED_DEVICE_HEADER = 'x-verified-device'
 export const GAME_CODE_HEADER = 'x-game-code'
 export const GONE_REASON_HEADER = 'x-gone-reason'
+export const WATCHER_HEADER = 'x-watcher'
 
-type SocketAttachment = Readonly<{ deviceId: string }>
+type SocketAttachment = Readonly<{ deviceId: string; isWatcher: boolean }>
 
 const randomSeed = (): number => {
   const buffer = new Uint32Array(1)
@@ -215,9 +217,11 @@ export class GameDO extends DurableObject<Env> {
     code: string,
     deviceId: string,
     goneReason = 'This game doesn’t exist.',
+    isWatcher = false,
   ): Promise<GameSnapshot> {
     return Option.match(this.maybeRoom, {
-      onSome: room => snapshotFor(room, deviceId),
+      onSome: room =>
+        isWatcher ? watchSnapshotFor(room) : snapshotFor(room, deviceId),
       onNone: () => GameSnapshot.Gone({ code, reason: goneReason }),
     })
   }
@@ -237,13 +241,14 @@ export class GameDO extends DurableObject<Env> {
     const pair = new WebSocketPair()
     const [client, server] = [pair[0], pair[1]]
     this.ctx.acceptWebSocket(server)
-    const attachment: SocketAttachment = { deviceId }
+    const isWatcher = request.headers.get(WATCHER_HEADER) === '1'
+    const attachment: SocketAttachment = { deviceId, isWatcher }
     server.serializeAttachment(attachment)
     const goneReason = request.headers.get(GONE_REASON_HEADER) ?? undefined
     this.send(
       server,
       ServerMessage.Snapshot({
-        snapshot: await this.snapshot(code, deviceId, goneReason),
+        snapshot: await this.snapshot(code, deviceId, goneReason, isWatcher),
       }),
     )
     return new Response(null, { status: 101, webSocket: client })
@@ -255,6 +260,13 @@ export class GameDO extends DurableObject<Env> {
   ): Promise<void> {
     const attachment = this.attachmentOf(socket)
     if (attachment === null || typeof raw !== 'string') {
+      return
+    }
+    if (attachment.isWatcher) {
+      this.send(
+        socket,
+        ServerMessage.Rejected({ reason: 'A table screen only watches.' }),
+      )
       return
     }
     await Option.match(decodeClientMessage(raw), {
@@ -287,7 +299,10 @@ export class GameDO extends DurableObject<Env> {
       value !== null &&
       'deviceId' in value &&
       typeof value.deviceId === 'string'
-      ? { deviceId: value.deviceId }
+      ? {
+          deviceId: value.deviceId,
+          isWatcher: 'isWatcher' in value && value.isWatcher === true,
+        }
       : null
   }
 
@@ -378,9 +393,10 @@ export class GameDO extends DurableObject<Env> {
   }
 
   private hasOpenSocket(deviceId: string): boolean {
-    return this.ctx
-      .getWebSockets()
-      .some(socket => this.attachmentOf(socket)?.deviceId === deviceId)
+    return this.ctx.getWebSockets().some(socket => {
+      const attachment = this.attachmentOf(socket)
+      return attachment?.deviceId === deviceId && !attachment.isWatcher
+    })
   }
 
   private async sendPing(room: Room, fromDeviceId: string): Promise<void> {
@@ -408,7 +424,9 @@ export class GameDO extends DurableObject<Env> {
         this.send(
           socket,
           ServerMessage.Snapshot({
-            snapshot: snapshotFor(room, attachment.deviceId),
+            snapshot: attachment.isWatcher
+              ? watchSnapshotFor(room)
+              : snapshotFor(room, attachment.deviceId),
           }),
         )
       }

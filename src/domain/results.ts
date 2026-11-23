@@ -2,7 +2,7 @@ import { Array, Number, Option, Schema, pipe } from 'effect'
 
 import type { Model } from '../model'
 import { ROUTES, type Route } from './board'
-import { standings } from './game'
+import { type HasClaims, standings } from './game'
 
 // NOTE: What one seat takes away from a finished game, for the stats on the
 // main menu. Server games and local bot games both build it from the final
@@ -54,7 +54,7 @@ export const averageScore = (stats: Stats): number =>
 // NOTE: The longest continuous trail through a seat's own routes, counted in
 // train cars. Each route is used at most once; cities may repeat. The board
 // is small, so a plain depth-first search over the seat's routes is enough.
-export const longestRoute = (model: Model, seatIndex: number): number => {
+export const longestRoute = (model: HasClaims, seatIndex: number): number => {
   const owned: ReadonlyArray<Route> = Array.filter(ROUTES, route =>
     Array.some(
       model.claims,

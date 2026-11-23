@@ -19,6 +19,7 @@ import {
   GAME_CODE_HEADER,
   GONE_REASON_HEADER,
   VERIFIED_DEVICE_HEADER,
+  WATCHER_HEADER,
 } from './gameDO'
 import { readTombstone } from './tombstone'
 
@@ -146,6 +147,10 @@ const connectToGame = async (
   headers.delete(DEVICE_SECRET_HEADER)
   headers.set(VERIFIED_DEVICE_HEADER, deviceId)
   headers.set(GAME_CODE_HEADER, code)
+  headers.set(
+    WATCHER_HEADER,
+    new URL(request.url).searchParams.get('watch') === '1' ? '1' : '0',
+  )
   const stub = env.GAMES.getByName(code)
   if (!(await stub.exists())) {
     const tombstone = await readTombstone(env, code)

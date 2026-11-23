@@ -648,6 +648,8 @@ export const applyClientMessage = (
 
 // SNAPSHOT
 
+const WATCHER_INDEX = -1
+
 const lobbySeats = (room: Room, deviceId: string): ReadonlyArray<LobbySeat> =>
   Array.map(room.seats, (seat, seatIndex) => ({
     seatIndex,
@@ -703,6 +705,31 @@ export const snapshotFor = (room: Room, deviceId: string): GameSnapshot => {
               }),
           }),
   })
+}
+
+// NOTE: A table screen sees the room as an outsider would, whatever seat its
+// device holds, so a phone can double as a watcher without leaking its hand.
+export const watchSnapshotFor = (room: Room): GameSnapshot => {
+  const lobby = () =>
+    GameSnapshot.WatchLobby({
+      code: room.code,
+      seats: lobbySeats(room, ''),
+      isRematch: room.phase === 'RematchLobby',
+    })
+  return isLobbyPhase(room)
+    ? lobby()
+    : Option.match(room.maybeGame, {
+        onNone: lobby,
+        onSome: game =>
+          GameSnapshot.WatchTable({
+            code: room.code,
+            view: projectView(game, WATCHER_INDEX),
+            revealedTickets:
+              game.phase._tag === 'GameOver'
+                ? Array.map(game.players, player => player.ticketIds)
+                : [],
+          }),
+      })
 }
 
 // MENU
