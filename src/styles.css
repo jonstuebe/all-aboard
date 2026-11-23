@@ -3007,7 +3007,7 @@ button.card.deck:hover:not(:disabled) {
 /* Sideways: the map fills the left edge to edge, top to bottom; the header,
    chips and dock share a column on the right. Notices float over the map. */
 @media (orientation: landscape) and (max-height: 500px) {
-  .app {
+  .app:not(.screen) {
     display: grid;
     grid-template-columns:
       minmax(0, 1fr) clamp(240px, 31vw, 340px)
@@ -3023,7 +3023,7 @@ button.card.deck:hover:not(:disabled) {
     display: contents;
   }
 
-  .app > *,
+  :where(.app:not(.screen)) > *,
   .play-area > *,
   .sidebar > * {
     grid-column: 2;
@@ -3053,7 +3053,7 @@ button.card.deck:hover:not(:disabled) {
     box-shadow: none;
   }
 
-  .topbar {
+  :where(.app:not(.screen)) > .topbar {
     grid-row: 1;
     position: static;
     gap: 4px 8px;
@@ -3063,7 +3063,7 @@ button.card.deck:hover:not(:disabled) {
     box-shadow: none;
   }
 
-  .brand-name {
+  :where(.app:not(.screen)) .brand-name {
     font-size: 1.125rem;
   }
 
@@ -3108,7 +3108,7 @@ button.card.deck:hover:not(:disabled) {
     font-size: 0.8125rem;
   }
 
-  .panel {
+  :where(.app:not(.screen)) .panel {
     grid-row: 5;
     align-self: start;
     max-height: 100%;
@@ -3152,7 +3152,7 @@ button.card.deck:hover:not(:disabled) {
     max-width: 46vw;
   }
 
-  .notice {
+  :where(.app:not(.screen)) .notice {
     top: 10px;
   }
 

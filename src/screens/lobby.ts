@@ -200,37 +200,44 @@ const seatedControls = (
     [
       h.span([h.Class('field-label')], ['Your colour']),
       tonePicker(lobby, viewerTone(lobby), h),
-      lobby.isViewerHost
-        ? h.button(
-            [
-              h.Class('btn btn-cream btn-block'),
-              h.Type('button'),
-              h.Disabled(lobby.seats.length >= MAX_SEATS),
-              h.OnClick(Message.ClickedAddBot()),
-            ],
-            ['Add a bot'],
-          )
-        : h.empty,
-      lobby.isRematch && !lobby.isViewerHost
-        ? h.button(
-            [
-              h.Class(
-                `btn btn-block ${isViewerReady ? 'btn-cream' : 'btn-green'}`,
-              ),
-              h.Type('button'),
-              h.OnClick(Message.ClickedReady({ isReady: !isViewerReady })),
-            ],
-            [isViewerReady ? 'Not ready after all' : 'I’m ready'],
-          )
-        : h.empty,
-      primaryAction(lobby, readySeats, h),
-      h.button(
+      // NOTE: The buttons share a row wrapper so that, held sideways, they can
+      // sit side by side; upright the wrapper is display: contents.
+      h.div(
+        [h.Class('lobby-actions')],
         [
-          h.Class('btn btn-text lobby-leave'),
-          h.Type('button'),
-          h.OnClick(Message.ClickedLeaveLobby()),
+          lobby.isViewerHost
+            ? h.button(
+                [
+                  h.Class('btn btn-cream btn-block'),
+                  h.Type('button'),
+                  h.Disabled(lobby.seats.length >= MAX_SEATS),
+                  h.OnClick(Message.ClickedAddBot()),
+                ],
+                ['Add a bot'],
+              )
+            : h.empty,
+          lobby.isRematch && !lobby.isViewerHost
+            ? h.button(
+                [
+                  h.Class(
+                    `btn btn-block ${isViewerReady ? 'btn-cream' : 'btn-green'}`,
+                  ),
+                  h.Type('button'),
+                  h.OnClick(Message.ClickedReady({ isReady: !isViewerReady })),
+                ],
+                [isViewerReady ? 'Not ready after all' : 'I’m ready'],
+              )
+            : h.empty,
+          primaryAction(lobby, readySeats, h),
+          h.button(
+            [
+              h.Class('btn btn-text lobby-leave'),
+              h.Type('button'),
+              h.OnClick(Message.ClickedLeaveLobby()),
+            ],
+            ['Cancel'],
+          ),
         ],
-        ['Cancel'],
       ),
     ],
   )
@@ -287,33 +294,50 @@ export const lobbyView = (
       h.section(
         [h.Class('panel menu-card lobby'), h.AriaLabelledBy('lobby-title')],
         [
-          h.h2(
-            [h.Id('lobby-title'), h.Class('menu-heading')],
+          // NOTE: Two column wrappers so that, held sideways, the invite sits
+          // left and the seats right; upright both are display: contents.
+          h.div(
+            [h.Class('lobby-column is-invite')],
             [
-              lobby.isRematch
-                ? 'Rematch: same seats'
-                : lobby.isViewerSeated
-                  ? 'Invite your friends'
-                  : 'Join this game',
+              h.h2(
+                [h.Id('lobby-title'), h.Class('menu-heading')],
+                [
+                  lobby.isRematch
+                    ? 'Rematch: same seats'
+                    : lobby.isViewerSeated
+                      ? 'Invite your friends'
+                      : 'Join this game',
+                ],
+              ),
+              inviteBlock(game, lobby, h),
+              noticeView(game, h),
+              h.p(
+                [h.Class('lobby-hint')],
+                ['Friends type the code on the home screen, or open the link.'],
+              ),
             ],
           ),
-          inviteBlock(game, lobby, h),
-          noticeView(game, h),
-          h.h3(
-            [h.Class('lobby-seats-heading')],
-            [`Seats: ${lobby.seats.length} of ${MAX_SEATS}`],
+          h.div(
+            [h.Class('lobby-column is-seats')],
+            [
+              h.h3(
+                [h.Class('lobby-seats-heading')],
+                [`Seats: ${lobby.seats.length} of ${MAX_SEATS}`],
+              ),
+              h.ol(
+                [h.Class('lobby-seats'), h.AriaLive('polite')],
+                Array.map(lobby.seats, seat => seatRow(lobby, seat, h)),
+              ),
+              lobby.isViewerSeated
+                ? seatedControls(lobby, h)
+                : joinForm(game, lobby, h),
+            ],
           ),
-          h.ol(
-            [h.Class('lobby-seats'), h.AriaLive('polite')],
-            Array.map(lobby.seats, seat => seatRow(lobby, seat, h)),
-          ),
-          lobby.isViewerSeated
-            ? seatedControls(lobby, h)
-            : joinForm(game, lobby, h),
         ],
       ),
     ],
     h,
+    'is-lobby',
   )
 
 export const messageScreen = (

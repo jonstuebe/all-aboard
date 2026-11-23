@@ -5,6 +5,7 @@ import type { Message } from '../message'
 export const screenFrame = (
   children: ReadonlyArray<Html>,
   h: HtmlBuilder<Message>,
+  modifier = '',
 ): Html =>
   h.div(
     [h.Class('app screen')],
@@ -22,6 +23,6 @@ export const screenFrame = (
           ),
         ],
       ),
-      h.main([h.Class('screen-body')], children),
+      h.main([h.Class(`screen-body ${modifier}`.trim())], children),
     ],
   )

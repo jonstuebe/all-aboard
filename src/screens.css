@@ -828,3 +828,282 @@
   color: #7c2015;
   font-weight: 600;
 }
+
+/* HOME, SIDEWAYS: your games and stats take the left column under the
+   wordmark; the new-game card stays pinned on the right while they scroll. */
+
+.home-side {
+  display: contents;
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .app.screen:has(> .is-home) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 330px;
+    grid-template-rows: auto 1fr;
+    column-gap: 22px;
+    align-items: start;
+    padding-inline: max(16px, env(safe-area-inset-left, 0px))
+      max(16px, env(safe-area-inset-right, 0px));
+  }
+
+  .app.screen:has(> .is-home) > .topbar {
+    grid-column: 1;
+    grid-row: 1;
+    position: static;
+    justify-content: flex-start;
+    padding: calc(14px + env(safe-area-inset-top, 0px)) 0 12px;
+    background: none;
+    border: 0;
+    box-shadow: none;
+  }
+
+  .screen-body.is-home {
+    display: contents;
+  }
+
+  .is-home > .wizard {
+    grid-column: 2;
+    grid-row: 1 / 3;
+    position: sticky;
+    top: max(12px, env(safe-area-inset-top, 0px));
+    width: auto;
+    max-height: calc(100dvh - 24px);
+    margin-block: 12px;
+    overflow: auto;
+    padding: 14px 16px 10px;
+  }
+
+  .is-home .wizard-step {
+    gap: 9px;
+  }
+
+  .is-home .wizard-question {
+    font-size: 1.3rem;
+  }
+
+  .is-home .btn-with-detail {
+    padding-block: 9px;
+  }
+
+  .is-home > .home-side {
+    grid-column: 1;
+    grid-row: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-width: 0;
+    padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
+  }
+
+  .home-side > * {
+    width: auto;
+  }
+}
+
+/* LOBBY, SIDEWAYS: one wide card split by a dashed rule. The invite sits on
+   the left; the seats, your colour and the buttons on the right, which
+   scrolls on its own if the seats outgrow it. */
+
+.lobby-column,
+.lobby-actions {
+  display: contents;
+}
+
+.lobby-hint {
+  display: none;
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .app.screen:has(> .is-lobby) {
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  .app.screen:has(> .is-lobby) > .topbar {
+    position: static;
+    padding-block: calc(8px + env(safe-area-inset-top, 0px)) 6px;
+    background: none;
+    border: 0;
+    box-shadow: none;
+  }
+
+  .screen-body.is-lobby {
+    flex: 1;
+    min-height: 0;
+    align-items: stretch;
+    padding: 0 max(16px, env(safe-area-inset-right, 0px))
+      max(12px, env(safe-area-inset-bottom, 0px))
+      max(16px, env(safe-area-inset-left, 0px));
+  }
+
+  .panel.menu-card.lobby {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    flex: 1;
+    width: auto;
+    min-height: 0;
+    padding: 18px 22px 12px;
+  }
+
+  .lobby-column {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 0;
+  }
+
+  .lobby-column.is-invite {
+    padding-right: 20px;
+    border-right: 1px dashed var(--paper-edge);
+  }
+
+  .lobby-column.is-seats {
+    padding-left: 20px;
+  }
+
+  .lobby .menu-heading {
+    font-size: 1.45rem;
+    text-align: left;
+  }
+
+  .lobby-hint {
+    display: block;
+    margin: auto 0 0;
+    font-size: 0.875rem;
+    color: var(--ink-muted);
+  }
+
+  .lobby-seats-heading {
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  /* The seat list scrolls on its own, so Start game never leaves the card. */
+  .lobby-seats {
+    flex: 0 1 auto;
+    min-height: 0;
+    gap: 6px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .lobby-seat {
+    flex: none;
+    min-height: 40px;
+    padding-block: 4px;
+  }
+
+  .lobby-controls {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    flex: none;
+    gap: 10px;
+    margin-top: auto;
+    padding-bottom: 4px;
+  }
+
+  .lobby-controls > .tone-picker {
+    justify-self: end;
+    gap: 6px;
+  }
+
+  .lobby-controls .tone-swatch {
+    width: 30px;
+    height: 30px;
+  }
+
+  .lobby-seat .btn-compact {
+    min-height: 32px;
+  }
+
+  /* A guest's form uses the same rows as the host's controls: label on the
+     left, field on the right, then Cancel beside Take a seat. Stacked, it ran
+     off the bottom of the card and squeezed the seat list away. */
+  .join-lobby {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    flex: none;
+    gap: 10px 14px;
+    margin-top: auto;
+    padding-bottom: 4px;
+  }
+
+  .join-lobby > .field {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: subgrid;
+    align-items: center;
+    margin: 0;
+  }
+
+  .join-lobby .field-input {
+    min-height: 42px;
+  }
+
+  .join-lobby > .tone-picker {
+    justify-self: end;
+    gap: 6px;
+  }
+
+  .join-lobby .tone-swatch {
+    width: 30px;
+    height: 30px;
+  }
+
+  .join-lobby > .lobby-leave {
+    grid-row: 3;
+    grid-column: 1;
+    margin: 0;
+    padding-inline: 4px;
+  }
+
+  .join-lobby > .lobby-primary {
+    grid-row: 3;
+    grid-column: 2;
+    margin: 0;
+  }
+
+  /* The invite column is half the width here, so size the code to it rather
+     than to the whole screen. */
+  .invite-code {
+    font-size: clamp(1.25rem, 3.4vw, 2.1rem);
+  }
+
+  .lobby-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .lobby-actions > .btn,
+  .lobby-actions > .lobby-wait {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    white-space: nowrap;
+  }
+
+  .lobby-actions > .lobby-wait,
+  .lobby-actions > .lobby-primary:disabled {
+    flex: 1.3;
+    padding: 6px 10px;
+    font-size: 0.9rem;
+    line-height: 1.2;
+    white-space: normal;
+  }
+
+  .lobby-actions > .lobby-primary {
+    flex: 1.3;
+  }
+
+  .lobby-actions > .lobby-leave {
+    flex: none;
+    order: -1;
+    padding-inline: 4px;
+  }
+}

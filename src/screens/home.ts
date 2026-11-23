@@ -361,4 +361,11 @@ export const homeView = (
   inputs: HomeInputs,
   extras: ReadonlyArray<Html>,
   h: H,
-): Html => screenFrame([newGameView(home, inputs, h), ...extras], h)
+): Html =>
+  // NOTE: Your games and stats share one wrapper so that, held sideways, they
+  // can take the left column while the new-game card stays on the right.
+  screenFrame(
+    [newGameView(home, inputs, h), h.div([h.Class('home-side')], extras)],
+    h,
+    'is-home',
+  )
