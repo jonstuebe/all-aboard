@@ -3,8 +3,11 @@
   "name": "all-aboard",
   "main": "worker/index.ts",
   "compatibility_date": "2026-11-01",
-  // NOTE: Local development only. Nothing here has been deployed, and the KV
-  // id below is a placeholder that wrangler dev simulates locally.
+  // NOTE: Production, served at all-aboard.jonstuebe.com. Cloudflare's Git
+  // integration (Workers Builds) deploys it on each push to main.
+  "routes": [{ "pattern": "all-aboard.jonstuebe.com", "custom_domain": true }],
+  "workers_dev": false,
+  "preview_urls": false,
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
@@ -18,10 +21,13 @@
     ],
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["GameDO", "PlayerDO"] }],
-  "kv_namespaces": [{ "binding": "TOMBSTONES", "id": "local-tombstones" }],
+  "kv_namespaces": [
+    { "binding": "TOMBSTONES", "id": "e324e114562445fc882b65a91f21e4f3" },
+  ],
   "vars": {
     "BOT_DELAY_MS": "1500",
   },
+  "observability": { "enabled": true },
   "dev": {
     "port": 8790,
     "ip": "127.0.0.1",

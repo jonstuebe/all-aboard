@@ -16,6 +16,8 @@ const player = (overrides: Partial<ClientView['players'][number]> = {}) => ({
   routePoints: 0,
   ticketIds: [],
   ticketCount: 2,
+  offeredTicketIds: [],
+  isPickingTickets: false,
   ...overrides,
 })
 

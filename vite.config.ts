@@ -3,13 +3,24 @@ import { defineConfig, type Plugin } from 'vite'
 import { foldkit } from '@foldkit/vite-plugin'
 import tailwindcss from '@tailwindcss/vite'
 
-// NOTE: Link previews need absolute URLs. Set SITE_URL (no trailing slash) for
-// a public build; without it the share tags fall back to root-relative paths.
-const siteUrl = (): Plugin => ({
-  name: 'site-url',
-  transformIndexHtml: html =>
-    html.replaceAll('%SITE_URL%', (process.env.SITE_URL ?? '').replace(/\/$/, '')),
-})
+// NOTE: Link previews need absolute URLs. A build uses the production address
+// unless SITE_URL (no trailing slash) says otherwise; the dev server uses
+// root-relative paths.
+const PRODUCTION_URL = 'https://all-aboard.jonstuebe.com'
+
+const siteUrl = (): Plugin => {
+  let base = ''
+  return {
+    name: 'site-url',
+    configResolved: config => {
+      base = (
+        process.env.SITE_URL ??
+        (config.command === 'build' ? PRODUCTION_URL : '')
+      ).replace(/\/$/, '')
+    },
+    transformIndexHtml: html => html.replaceAll('%SITE_URL%', base),
+  }
+}
 
 export default defineConfig({
   plugins: [tailwindcss(), foldkit(), siteUrl()],
