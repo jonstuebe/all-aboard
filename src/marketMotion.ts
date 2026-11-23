@@ -1,13 +1,15 @@
 import { Effect, Stream } from 'effect'
 import type { Mount } from 'foldkit'
 
+import { HAND_CARD_DATA } from './handMotion'
 import { DOCK_TAB_DATA } from './segmentDrag'
 
 // Animates the draw row. When a face-up card is taken, a copy of it flies
 // off (to the Hand tab, or the hand panel on wide screens, when it was
 // yours; up and away when a bot took it) and the card that replaces it
-// deals in from the deck. A blind draw from the deck sends a card back to
-// your hand the same way.
+// deals in from the deck. A blind draw from the deck turns the card over
+// big in the middle of the screen, holds it there so you can see what you
+// got, then sends it to your hand.
 //
 // The view tags each slot with `data-face` (its color, or `empty`) and the
 // deck with `data-count`. This watches those attributes instead of the
@@ -26,6 +28,11 @@ const DEAL_MS = 420
 const DEAL_DELAY_MS = 110
 const EASE_OUT = 'cubic-bezier(0.22, 1, 0.36, 1)'
 const EASE_IN_OUT = 'cubic-bezier(0.65, 0, 0.35, 1)'
+const REVEAL_IN_MS = 420
+const REVEAL_HOLD_MS = 900
+const REVEAL_OUT_MS = 440
+const REVEAL_WIDTH = 132
+const HAND_KEY = `data-${HAND_CARD_DATA}`
 
 // Boxes are kept relative to the row, so a scroll between renders
 // doesn't throw them off.
@@ -44,6 +51,7 @@ type Snapshot = Readonly<{
   deckEnabled: boolean
   deckGhost: Element | null
   deckBox: Box | null
+  handCounts: ReadonlyMap<string, number>
 }>
 
 const prefersReducedMotion = (): boolean =>
@@ -82,6 +90,33 @@ const onScreen = (list: HTMLElement, box: Box): DOMRect => {
   return new DOMRect(base.left + box.x, base.top + box.y, box.width, box.height)
 }
 
+// The hand row lists each color you hold once, labelled "<count> <color>".
+// It stays in the page on phones even while another dock tab shows.
+const handCards = (): ReadonlyArray<HTMLElement> =>
+  Array.from(
+    document.querySelectorAll<HTMLElement>(`.panel.hand li[${HAND_KEY}]`),
+  )
+
+const handCounts = (): ReadonlyMap<string, number> =>
+  new Map(
+    handCards().map(card => [
+      card.getAttribute(HAND_KEY) ?? '',
+      Number.parseInt(card.getAttribute('aria-label') ?? '0', 10) || 0,
+    ]),
+  )
+
+// The color that gained a card between two renders, as a copy of its hand
+// card without the count badge.
+const drawnCardFace = (before: ReadonlyMap<string, number>): Element | null => {
+  const gained = handCards().find(card => {
+    const color = card.getAttribute(HAND_KEY) ?? ''
+    return (handCounts().get(color) ?? 0) > (before.get(color) ?? 0)
+  })
+  const face = copyOf(gained ?? null)
+  face?.querySelector('.hand-count')?.remove()
+  return face
+}
+
 const snapshot = (list: HTMLElement): Snapshot => {
   const deck = deckItem(list)
   const deckButton = deck === null ? null : buttonIn(deck)
@@ -102,6 +137,7 @@ const snapshot = (list: HTMLElement): Snapshot => {
     deckEnabled: deckButton !== null && !deckButton.disabled,
     deckGhost: copyOf(deckBack ?? null),
     deckBox: deckBack == null ? null : boxIn(list, deckBack),
+    handCounts: handCounts(),
   }
 }
 
@@ -175,6 +211,81 @@ const flyAway = (
   }
   animation.addEventListener('finish', finish)
   animation.addEventListener('cancel', () => host.remove())
+}
+
+// A blind draw: the card back rises from the deck to the middle of the
+// screen, growing and turning face up, holds there, then shrinks into the
+// hand. Both faces sit in a bare market panel so the card rules apply.
+const revealDraw = (
+  back: Element,
+  face: Element,
+  from: DOMRect,
+  aspect: number,
+  to: DOMRect | null,
+  onLand: () => void,
+): void => {
+  const width = Math.min(REVEAL_WIDTH, window.innerWidth * 0.4)
+  const height = width * aspect
+  const left = window.innerWidth / 2 - width / 2
+  const top = window.innerHeight * 0.42 - height / 2
+
+  const host = document.createElement('div')
+  host.className = 'panel market card-flight card-reveal'
+  host.setAttribute('aria-hidden', 'true')
+  Object.assign(host.style, {
+    left: `${left}px`,
+    top: `${top}px`,
+    width: `${width}px`,
+    height: `${height}px`,
+  })
+  const flipper = document.createElement('div')
+  flipper.className = 'card-reveal-flipper'
+  back.classList.add('card-reveal-back')
+  face.classList.add('card-reveal-face')
+  back.removeAttribute('disabled')
+  flipper.append(face, back)
+  host.appendChild(flipper)
+  document.body.appendChild(host)
+
+  const centerX = left + width / 2
+  const centerY = top + height / 2
+  const startScale = from.width / width
+  const startX = from.left + from.width / 2 - centerX
+  const startY = from.top + from.height / 2 - centerY
+  const endX = to === null ? 0 : to.left + to.width / 2 - centerX
+  const endY = to === null ? -height : to.top + to.height / 2 - centerY
+
+  const total = REVEAL_IN_MS + REVEAL_HOLD_MS + REVEAL_OUT_MS
+  const arrived = REVEAL_IN_MS / total
+  const leaving = (REVEAL_IN_MS + REVEAL_HOLD_MS) / total
+  const motion = host.animate(
+    [
+      {
+        transform: `translate(${startX}px, ${startY}px) scale(${startScale})`,
+        easing: EASE_OUT,
+      },
+      { transform: 'none', offset: arrived },
+      { transform: 'none', offset: leaving, opacity: 1, easing: EASE_IN_OUT },
+      {
+        transform: `translate(${endX}px, ${endY}px) rotate(4deg) scale(0.3)`,
+        opacity: 0,
+      },
+    ],
+    { duration: total, fill: 'forwards' },
+  )
+  flipper.animate(
+    [
+      { transform: 'rotateY(180deg)', easing: EASE_OUT },
+      { transform: 'rotateY(0deg)', offset: arrived },
+      { transform: 'rotateY(0deg)' },
+    ],
+    { duration: total, fill: 'forwards' },
+  )
+  motion.addEventListener('finish', () => {
+    host.remove()
+    onLand()
+  })
+  motion.addEventListener('cancel', () => host.remove())
 }
 
 // The new card deals in from the deck, turning face up as it arrives.
@@ -261,12 +372,29 @@ const watchMarketRow = (list: HTMLElement): (() => void) => {
       previous.deckGhost !== null &&
       previous.deckBox !== null
     ) {
-      flyAway(
-        previous.deckGhost,
-        onScreen(list, previous.deckBox),
-        handTarget(),
-        bumpHandTab,
-      )
+      const face = drawnCardFace(previous.handCounts)
+      const sample = after.slots[0]?.box
+      const aspect =
+        sample === undefined || sample.width === 0
+          ? 1.4
+          : sample.height / sample.width
+      if (face === null) {
+        flyAway(
+          previous.deckGhost,
+          onScreen(list, previous.deckBox),
+          handTarget(),
+          bumpHandTab,
+        )
+      } else {
+        revealDraw(
+          previous.deckGhost,
+          face,
+          onScreen(list, previous.deckBox),
+          aspect,
+          handTarget(),
+          bumpHandTab,
+        )
+      }
     }
   }
 
