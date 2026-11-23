@@ -134,6 +134,14 @@ const joinForm = (
         ],
         [isFull ? 'This lobby is full' : 'Take a seat'],
       ),
+      h.button(
+        [
+          h.Class('btn btn-text lobby-leave'),
+          h.Type('button'),
+          h.OnClick(Message.ClickedMenu()),
+        ],
+        ['Cancel'],
+      ),
     ],
   )
 }
@@ -222,7 +230,7 @@ const seatedControls = (
           h.Type('button'),
           h.OnClick(Message.ClickedLeaveLobby()),
         ],
-        ['Leave lobby'],
+        ['Cancel'],
       ),
     ],
   )
@@ -279,14 +287,6 @@ export const lobbyView = (
       h.section(
         [h.Class('panel menu-card lobby'), h.AriaLabelledBy('lobby-title')],
         [
-          h.button(
-            [
-              h.Class('btn btn-cream btn-compact lobby-back'),
-              h.Type('button'),
-              h.OnClick(Message.ClickedMenu()),
-            ],
-            ['← Menu'],
-          ),
           h.h2(
             [h.Id('lobby-title'), h.Class('menu-heading')],
             [

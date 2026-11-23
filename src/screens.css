@@ -200,11 +200,6 @@
   text-box: trim-both cap alphabetic;
 }
 
-.lobby-back {
-  align-self: flex-start;
-  margin: -6px 0 4px;
-}
-
 .invite-block {
   display: flex;
   flex-direction: column;
