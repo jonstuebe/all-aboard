@@ -2,8 +2,9 @@ import { Array, Option } from 'effect'
 import type { Html, HtmlBuilder } from 'foldkit/html'
 
 import { type Stats, averageScore, winRate } from '../domain/results'
-import { Message } from '../message'
 import { MenuState } from '../menuSync'
+import { Message } from '../message'
+import { pingMinutesLeft } from '../pings'
 import type { Menu, MenuEntry, MenuStatus } from '../protocol'
 import { gamePath } from '../route'
 
@@ -33,7 +34,10 @@ const entryDetail = (entry: MenuEntry): string => {
     case 'Left':
       return 'Left'
     case 'Gone':
-      return Option.getOrElse(entry.maybeReason, () => 'This game no longer exists')
+      return Option.getOrElse(
+        entry.maybeReason,
+        () => 'This game no longer exists',
+      )
   }
 }
 
@@ -47,7 +51,7 @@ const pingButton = (
   Option.match(entry.maybePingAvailableAt, {
     onNone: () => h.empty,
     onSome: availableAt => {
-      const waitMinutes = Math.ceil((availableAt - clock.now) / 60_000)
+      const waitMinutes = pingMinutesLeft(availableAt, clock.now)
       const isReady = waitMinutes <= 0
       return h.button(
         [
@@ -104,27 +108,33 @@ const gameSections = (
   clock: PingClock,
   h: HtmlBuilder<Message>,
 ): ReadonlyArray<Html> =>
-  Array.getSomes(Array.map(SECTIONS, section => {
-    const entries = Array.filter(menu.games, entry =>
-      Array.contains(section.statuses, entry.status),
-    )
-    return Array.isReadonlyArrayNonEmpty(entries)
-      ? Option.some(
-          h.section(
-            [h.Class('panel menu-card menu-list')],
-            [
-              h.h2([h.Class('menu-subheading is-first')], [section.title]),
-              h.ul(
-                [h.Class('menu-games')],
-                Array.map(entries, entry => entryRow(entry, clock, h)),
-              ),
-            ],
-          ),
-        )
-      : Option.none()
-  }))
+  Array.getSomes(
+    Array.map(SECTIONS, section => {
+      const entries = Array.filter(menu.games, entry =>
+        Array.contains(section.statuses, entry.status),
+      )
+      return Array.isReadonlyArrayNonEmpty(entries)
+        ? Option.some(
+            h.section(
+              [h.Class('panel menu-card menu-list')],
+              [
+                h.h2([h.Class('menu-subheading is-first')], [section.title]),
+                h.ul(
+                  [h.Class('menu-games')],
+                  Array.map(entries, entry => entryRow(entry, clock, h)),
+                ),
+              ],
+            ),
+          )
+        : Option.none()
+    }),
+  )
 
-const statTile = (label: string, value: string, h: HtmlBuilder<Message>): Html =>
+const statTile = (
+  label: string,
+  value: string,
+  h: HtmlBuilder<Message>,
+): Html =>
   h.div(
     [h.Class('stat')],
     [
@@ -137,7 +147,10 @@ const statsCard = (stats: Stats, h: HtmlBuilder<Message>): Html =>
   h.section(
     [h.Class('panel menu-card menu-stats'), h.AriaLabelledBy('stats-title')],
     [
-      h.h2([h.Id('stats-title'), h.Class('menu-subheading is-first')], ['Stats']),
+      h.h2(
+        [h.Id('stats-title'), h.Class('menu-subheading is-first')],
+        ['Stats'],
+      ),
       stats.gamesPlayed === 0
         ? h.p([h.Class('menu-detail')], ['Finish a game to start your record.'])
         : h.dl(
@@ -146,7 +159,11 @@ const statsCard = (stats: Stats, h: HtmlBuilder<Message>): Html =>
               statTile('Games played', String(stats.gamesPlayed), h),
               statTile('Wins', String(stats.wins), h),
               statTile('Win rate', `${Math.round(winRate(stats) * 100)}%`, h),
-              statTile('Average score', String(Math.round(averageScore(stats))), h),
+              statTile(
+                'Average score',
+                String(Math.round(averageScore(stats))),
+                h,
+              ),
               statTile('Longest route', `${stats.longestRoute} cars`, h),
               statTile('Tickets completed', String(stats.ticketsCompleted), h),
             ],
@@ -158,7 +175,10 @@ const loadedView = (
   menu: Menu,
   clock: PingClock,
   h: HtmlBuilder<Message>,
-): ReadonlyArray<Html> => [...gameSections(menu, clock, h), statsCard(menu.stats, h)]
+): ReadonlyArray<Html> => [
+  ...gameSections(menu, clock, h),
+  statsCard(menu.stats, h),
+]
 
 export const menuView = (
   state: MenuState,

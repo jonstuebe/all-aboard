@@ -3,7 +3,13 @@ import { Command } from 'foldkit'
 
 import { Device, authHeaders } from './device'
 import { Message } from './message'
+import { PING_COOLDOWN_MS } from './protocol'
 import { PingStatus } from './table'
+
+// NOTE: `now` can be up to one clock tick old, so never show more than the
+// cooldown itself.
+export const pingMinutesLeft = (availableAt: number, now: number): number =>
+  Math.min(Math.ceil((availableAt - now) / 60_000), PING_COOLDOWN_MS / 60_000)
 
 // NOTE: The table's Ping button. The server says whether pinging makes sense
 // and when it next may; the client only counts down to that time.
@@ -22,7 +28,7 @@ export const pingStatus = (
     return PingStatus.Sending()
   }
   const availableAt = Option.getOrElse(table.maybePingAvailableAt, () => 0)
-  const minutesLeft = Math.ceil((availableAt - now) / 60_000)
+  const minutesLeft = pingMinutesLeft(availableAt, now)
   return minutesLeft > 0
     ? PingStatus.Waiting({ minutesLeft })
     : PingStatus.Ready()
