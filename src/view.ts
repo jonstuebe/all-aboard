@@ -724,12 +724,19 @@ const ticketsView = (
           h.h2([h.Id('tickets-title')], ['Your tickets']),
           h.button(
             [
-              h.Class('btn btn-cream btn-compact'),
+              h.Class('btn btn-cream btn-compact ticket-take'),
               h.Type('button'),
               h.Disabled(!canDrawTicket),
               h.OnClick(Message.ClickedDrawTicket()),
             ],
-            [`Take a ticket (${model.ticketPileCount} left)`],
+            [
+              h.span([h.Class('ticket-take-plus'), h.AriaHidden(true)], ['+']),
+              'Take a ticket',
+              h.span(
+                [h.Class('ticket-take-left')],
+                [`${model.ticketPileCount} left`],
+              ),
+            ],
           ),
         ],
       ),
@@ -745,6 +752,10 @@ const ticketsView = (
               h.span(
                 [h.Class('ticket-main')],
                 [
+                  h.span(
+                    [h.Class('ticket-ring'), h.AriaHidden(true)],
+                    [isComplete ? '✓' : ''],
+                  ),
                   h.span(
                     [h.Class('ticket-kicker'), h.AriaHidden(true)],
                     ['Destination ticket'],

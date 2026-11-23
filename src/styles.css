@@ -1883,6 +1883,24 @@ button.card.deck:hover:not(:disabled) {
   stroke-width: 1;
 }
 
+/* Tickets tab extras (option A). Only the phone dock shows them. */
+.ticket-ring,
+.ticket-take-plus {
+  display: none;
+}
+
+.ticket-take {
+  gap: 0.25em;
+}
+
+.ticket-take-left::before {
+  content: '(';
+}
+
+.ticket-take-left::after {
+  content: ')';
+}
+
 /* Draw tab extras (option A). Only the phone dock shows them. */
 .draw-progress,
 .market-label,
@@ -3002,6 +3020,143 @@ button.card.deck:hover:not(:disabled) {
   .deck-words span {
     font-size: 0.8125rem;
     opacity: 0.82;
+  }
+}
+
+/* Phone Tickets tab (option A): no heading, since the tab says Tickets. "Take
+   a ticket" is a dashed slot, and each ticket is one slim line with a ring
+   that fills with a check once it's connected. Sideways phones use it too. */
+@media (max-width: 640px), (orientation: landscape) and (max-height: 500px) {
+  .panel.tickets {
+    padding: 10px;
+  }
+
+  .panel.tickets .panel-head {
+    margin-bottom: 7px;
+  }
+
+  .panel.tickets .panel-head h2 {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .ticket-take.btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 40px;
+    padding: 0 12px;
+    border: 1.5px dashed rgb(244 231 200 / 0.45);
+    border-radius: 6px;
+    background: rgb(0 0 0 / 0.18);
+    box-shadow: none;
+    color: var(--cream);
+    font-family: var(--font-body);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    text-align: left;
+    transform: none;
+  }
+
+  .ticket-take.btn:disabled {
+    opacity: 0.5;
+  }
+
+  .ticket-take-plus {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--brass-face);
+    color: var(--brass-ink);
+    font-size: 1rem;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  .ticket-take-left {
+    margin-left: auto;
+    color: var(--cream-muted);
+    font-size: 0.8125rem;
+    font-weight: 500;
+  }
+
+  .ticket-take-left::before,
+  .ticket-take-left::after {
+    content: none;
+  }
+
+  .ticket-list {
+    gap: 7px;
+  }
+
+  .ticket {
+    --notch: 6px;
+    grid-template-columns: minmax(0, 1fr) 52px;
+    min-height: 42px;
+  }
+
+  .ticket-main {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+  }
+
+  .ticket-kicker {
+    display: none;
+  }
+
+  .ticket-ring {
+    display: grid;
+    place-items: center;
+    flex: none;
+    box-sizing: border-box;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid rgb(107 90 69 / 0.55);
+    color: #fff;
+    font-size: 0.6875rem;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  .ticket.is-done .ticket-ring {
+    border: none;
+    background: var(--success);
+  }
+
+  .ticket-route {
+    min-width: 0;
+    font-size: 1rem;
+  }
+
+  .ticket.is-done .ticket-state,
+  .ticket-state {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    border: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .ticket-points {
+    font-size: 1.25rem;
+  }
+
+  .ticket-unit {
+    display: none;
   }
 }
 
