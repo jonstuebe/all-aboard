@@ -17,6 +17,7 @@ export const Message = defineMessageUnion({
   UpdatedNameInput: { value: Schema.String },
   CompletedSavePlayerName: {},
   ClickedSeatCount: { count: Schema.Number },
+  DraggedSeatCount: { count: Schema.Number },
   ClickedNewBotGame: {},
   ClickedNewFriendGame: {},
   SucceededCreateGame: { code: Schema.String },

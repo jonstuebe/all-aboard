@@ -509,6 +509,10 @@ export const update = (model: Model, message: Message) =>
       model: modifyFields(model, { seatCount: () => clampSeatCount(count) }),
     }),
 
+    DraggedSeatCount: ({ count }) => ({
+      model: modifyFields(model, { seatCount: () => clampSeatCount(count) }),
+    }),
+
     ClickedNewBotGame: () => startLocalGame(model),
 
     ClickedNewFriendGame: () =>

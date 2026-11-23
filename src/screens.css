@@ -602,7 +602,13 @@
 }
 
 .wizard-segments {
+  --segment-count: 4;
+  --picked: 0;
+  position: relative;
   display: flex;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
   padding: 3px;
   border: 1.5px solid #8a6f4c;
   border-radius: 8px;
@@ -610,8 +616,31 @@
   box-shadow: inset 0 2px 4px rgb(0 0 0 / 0.15);
 }
 
+/* The dark block behind the picked number. It sits in its slot from
+   --picked, and while a finger drags it the DragSeatCount mount sets its
+   left edge directly so it follows the finger, then lets go to snap back. */
+.wizard-segment-thumb {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: calc(3px + (100% - 6px) / var(--segment-count) * var(--picked));
+  width: calc((100% - 6px) / var(--segment-count));
+  border-radius: 6px;
+  background: #3a2415;
+  box-shadow: 0 2px 0 rgb(0 0 0 / 0.35);
+  transition: left 220ms var(--ease-out);
+  pointer-events: none;
+}
+
+.wizard-segment-thumb.is-dragging {
+  transition: none;
+}
+
 .wizard-segment {
+  position: relative;
   flex: 1;
+  display: grid;
+  place-items: center;
   min-height: 44px;
   border: 0;
   border-radius: 6px;
@@ -620,13 +649,23 @@
   font: inherit;
   font-size: 1.05rem;
   font-weight: 700;
+  line-height: 1;
+  /* Zilla Slab's default figures are old-style, so 3, 4 and 5 drop below
+     the line and 2 sits high. Lining figures centre them. (After `font`,
+     which would reset this.) */
+  font-variant-numeric: lining-nums tabular-nums;
   cursor: pointer;
+  transition: color 120ms;
 }
 
 .wizard-segment.is-picked {
-  background: #3a2415;
   color: var(--paper-light);
-  box-shadow: 0 2px 0 rgb(0 0 0 / 0.35);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wizard-segment-thumb {
+    transition: none;
+  }
 }
 
 .wizard-footer {

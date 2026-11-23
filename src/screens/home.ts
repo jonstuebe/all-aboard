@@ -6,6 +6,7 @@ import { modifyFields } from 'foldkit/struct'
 import { Message } from '../message'
 import { MAX_SEATS, MIN_SEATS } from '../model'
 import { NAME_MAX_LENGTH } from '../protocol'
+import { DragSeatCount, SEGMENT_COUNT_DATA } from '../segmentDrag'
 import { screenFrame } from './frame'
 
 // NOTE: The home screen is a printed-ticket wizard that asks one question per
@@ -132,20 +133,33 @@ const seatCountPicker = (inputs: HomeInputs, h: H): Html =>
     [
       h.span([h.Class('wizard-label')], ['Players']),
       h.div(
-        [h.Class('wizard-segments'), h.Role('group'), h.AriaLabel('Players')],
-        Array.map(Array.range(MIN_SEATS, MAX_SEATS), count =>
-          h.button(
-            [
-              h.Class(
-                `wizard-segment${count === inputs.seatCount ? ' is-picked' : ''}`,
-              ),
-              h.Type('button'),
-              h.AriaPressed(String(count === inputs.seatCount)),
-              h.OnClick(Message.ClickedSeatCount({ count })),
-            ],
-            [String(count)],
+        [
+          h.Class('wizard-segments'),
+          h.Role('group'),
+          h.AriaLabel('Players'),
+          h.OnMount(DragSeatCount),
+          h.Style({
+            '--segment-count': String(MAX_SEATS - MIN_SEATS + 1),
+            '--picked': String(inputs.seatCount - MIN_SEATS),
+          }),
+        ],
+        [
+          h.span([h.Class('wizard-segment-thumb'), h.AriaHidden(true)]),
+          ...Array.map(Array.range(MIN_SEATS, MAX_SEATS), count =>
+            h.button(
+              [
+                h.Class(
+                  `wizard-segment${count === inputs.seatCount ? ' is-picked' : ''}`,
+                ),
+                h.Type('button'),
+                h.AriaPressed(String(count === inputs.seatCount)),
+                h.DataAttribute(SEGMENT_COUNT_DATA, String(count)),
+                h.OnClick(Message.ClickedSeatCount({ count })),
+              ],
+              [String(count)],
+            ),
           ),
-        ),
+        ],
       ),
     ],
   )
