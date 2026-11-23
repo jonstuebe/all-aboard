@@ -22,6 +22,7 @@ import { defineTaggedUnion } from 'foldkit/schema'
 import { modifyFields } from 'foldkit/struct'
 import { toString as urlToString } from 'foldkit/url'
 
+import { CloseConfirmDialog, ShowConfirmDialog } from './confirmDialog'
 import {
   Device,
   authHeaders,
@@ -642,12 +643,14 @@ export const update = (model: Model, message: Message) =>
       model: modifyFields(model, {
         maybeConfirmingDelete: () => Option.some(code),
       }),
+      commands: [ShowConfirmDialog()],
     }),
 
     ClickedCancelDeleteGame: () => ({
       model: modifyFields(model, {
         maybeConfirmingDelete: () => Option.none(),
       }),
+      commands: [CloseConfirmDialog()],
     }),
 
     ClickedConfirmDeleteGame: ({ code }) => ({
@@ -655,8 +658,15 @@ export const update = (model: Model, message: Message) =>
         maybeConfirmingDelete: () => Option.none(),
         menu: menu => withoutGame(menu, code),
       }),
-      commands: [DeleteGameFromMenu({ code, device: model.device })],
+      commands: [
+        CloseConfirmDialog(),
+        DeleteGameFromMenu({ code, device: model.device }),
+      ],
     }),
+
+    CompletedShowConfirmDialog: () => ({ model }),
+
+    CompletedCloseConfirmDialog: () => ({ model }),
 
     CompletedDeleteGame: () => ({ model, commands: [fetchMenu(model)] }),
 
@@ -690,6 +700,7 @@ export const update = (model: Model, message: Message) =>
           model,
           modifyFields(game, { isConfirmingLeave: () => true }),
         ),
+        commands: [ShowConfirmDialog()],
       })),
 
     CancelledLeaveGame: () =>
@@ -698,6 +709,7 @@ export const update = (model: Model, message: Message) =>
           model,
           modifyFields(game, { isConfirmingLeave: () => false }),
         ),
+        commands: [CloseConfirmDialog()],
       })),
 
     ConfirmedLeaveGame: () =>
@@ -707,6 +719,7 @@ export const update = (model: Model, message: Message) =>
           model: goHome(sent.model),
           commands: [
             ...(sent.commands ?? []),
+            CloseConfirmDialog(),
             Navigate({ url: '/' }),
             fetchMenu(model),
           ],

@@ -541,29 +541,6 @@
   color: var(--enamel-red);
 }
 
-.menu-game-confirm {
-  flex: 1;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px 12px;
-  padding: 6px 4px 6px 12px;
-}
-
-.menu-game-confirm-text {
-  flex: 1 1 200px;
-  margin: 0;
-  color: var(--ink);
-}
-
-.menu-game-confirm-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-left: auto;
-}
-
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
@@ -614,12 +591,6 @@
   color: var(--cream-muted);
   font-size: 0.875rem;
   text-align: center;
-}
-
-.leave-confirm {
-  align-self: center;
-  color: var(--cream-muted);
-  font-size: 0.875rem;
 }
 
 /* HOME WIZARD: a printed ticket that asks one question per step. It shares

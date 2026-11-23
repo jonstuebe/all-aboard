@@ -40,6 +40,10 @@ export const Message = defineMessageUnion({
   CompletedDeleteGame: { maybeReason: Schema.Option(Schema.String) },
   TickedClock: { now: Schema.Number },
 
+  // CONFIRM DIALOG
+  CompletedShowConfirmDialog: {},
+  CompletedCloseConfirmDialog: {},
+
   // NOTIFICATIONS
   CheckedNotifications: { status: NotificationStatus },
   ClickedEnableNotifications: {},

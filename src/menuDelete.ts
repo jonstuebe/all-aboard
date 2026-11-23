@@ -44,17 +44,35 @@ export const withoutGame = (state: MenuState, code: string): MenuState =>
     Offline: () => state,
   })
 
-/** What the confirm step says, since deleting means something different per game. */
-export const deletePrompt = (status: MenuStatus): string => {
+export type DeletePrompt = Readonly<{
+  title: string
+  body: string
+  action: string
+}>
+
+/** What the confirm dialog says, since deleting means something different per game. */
+export const deletePrompt = (status: MenuStatus): DeletePrompt => {
   switch (status) {
     case 'Lobby':
-      return 'Delete this lobby? If you opened it, it closes for everyone.'
+      return {
+        title: 'Delete this lobby?',
+        body: 'If you opened it, it closes for everyone.',
+        action: 'Delete',
+      }
     case 'YourTurn':
     case 'Waiting':
-      return 'Leave this game? A bot takes your seat.'
+      return {
+        title: 'Leave this game?',
+        body: 'A bot takes your seat, and the game leaves your list.',
+        action: 'Leave',
+      }
     case 'Finished':
     case 'Left':
     case 'Gone':
-      return 'Remove this game from your list?'
+      return {
+        title: 'Remove this game?',
+        body: 'It comes off your list. Your stats stay.',
+        action: 'Remove',
+      }
   }
 }

@@ -1,5 +1,6 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
 
+import { confirmChip, confirmDialog, confirmEyebrow } from './confirmDialog'
 import { Message } from './message'
 import { PingStatus, type Table, TableMode } from './table'
 
@@ -43,20 +44,49 @@ export const tableActionsView = (
       quietButton('Menu', Message.ClickedMenu(), h),
       quietButton('New game', Message.ClickedNewGame(), h),
     ],
-    Online: ({ ping, isConfirmingLeave }) =>
+    Online: ({ ping }) => [
+      pingButton(ping, h),
+      table.phase._tag === 'Playing'
+        ? quietButton('Leave game', Message.ClickedLeaveGame(), h)
+        : h.empty,
+      quietButton('Menu', Message.ClickedMenu(), h),
+    ],
+  })
+
+/** Leaving an online game asks once, in the shared confirm dialog. */
+export const leaveDialogView = (table: Table, h: HtmlBuilder<Message>): Html =>
+  TableMode.match(table.mode, {
+    Local: () => h.empty,
+    Online: ({ code, isConfirmingLeave }) =>
       table.phase._tag === 'Playing' && isConfirmingLeave
-        ? [
-            h.span([h.Class('leave-confirm')], ['A bot will take your seat.']),
-            quietButton('Leave', Message.ConfirmedLeaveGame(), h),
-            quietButton('Stay', Message.CancelledLeaveGame(), h),
-          ]
-        : [
-            pingButton(ping, h),
-            table.phase._tag === 'Playing'
-              ? quietButton('Leave game', Message.ClickedLeaveGame(), h)
-              : h.empty,
-            quietButton('Menu', Message.ClickedMenu(), h),
-          ],
+        ? confirmDialog(
+            {
+              details: [confirmEyebrow('Game', h), confirmChip(code, h)],
+              title: 'Leave this game?',
+              body: [h.p([], ['A bot takes your seat and plays it out.'])],
+              actions: [
+                h.button(
+                  [
+                    h.Class('btn btn-cream'),
+                    h.Type('button'),
+                    h.OnClick(Message.CancelledLeaveGame()),
+                  ],
+                  ['Stay'],
+                ),
+                h.button(
+                  [
+                    h.Class('btn btn-red'),
+                    h.Type('button'),
+                    h.OnClick(Message.ConfirmedLeaveGame()),
+                  ],
+                  ['Leave'],
+                ),
+              ],
+              onDismiss: Message.CancelledLeaveGame(),
+            },
+            h,
+          )
+        : h.empty,
   })
 
 export const resultsActionView = (

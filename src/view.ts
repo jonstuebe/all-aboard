@@ -42,7 +42,12 @@ import { AnimateHandRow, HAND_CARD_DATA } from './handMotion'
 import { Message } from './message'
 import { Phase, type Standing, type TurnStep } from './model'
 import type { Table } from './table'
-import { resultsActionView, tableActionsView, tableTitle } from './tableChrome'
+import {
+  leaveDialogView,
+  resultsActionView,
+  tableActionsView,
+  tableTitle,
+} from './tableChrome'
 
 type Model = Table
 
@@ -923,6 +928,7 @@ export const tableView = (model: Model, h: HtmlBuilder<Message>): Document => ({
         [h.Class('table')],
         [playAreaView(model, h), sidebarView(model, h)],
       ),
+      leaveDialogView(model, h),
     ],
   ),
 })

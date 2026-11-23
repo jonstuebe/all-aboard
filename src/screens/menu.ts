@@ -2,6 +2,7 @@ import { Array, Option } from 'effect'
 import type { Html, HtmlBuilder } from 'foldkit/html'
 
 import { BIN_ICON } from '../art'
+import { confirmChip, confirmDialog, confirmEyebrow } from '../confirmDialog'
 import { type Stats, averageScore, winRate } from '../domain/results'
 import { deletePrompt } from '../menuDelete'
 import { MenuState } from '../menuSync'
@@ -105,44 +106,41 @@ const pillTone = (entry: MenuEntry): string => {
   }
 }
 
-// NOTE: Deleting asks once, in place of the row's own content, since what it
-// does depends on the game (see deletePrompt).
-const confirmDelete = (entry: MenuEntry, h: HtmlBuilder<Message>): Html =>
-  h.div(
-    [
-      h.Class('menu-game-confirm'),
-      h.Role('group'),
-      h.AriaLabel(`Delete ${entry.code}`),
-    ],
-    [
-      h.p([h.Class('menu-game-confirm-text')], [deletePrompt(entry.status)]),
-      h.div(
-        [h.Class('menu-game-confirm-actions')],
-        [
-          h.button(
-            [
-              h.Class('btn btn-text btn-compact'),
-              h.Type('button'),
-              h.OnClick(Message.ClickedCancelDeleteGame()),
-            ],
-            ['Cancel'],
-          ),
-          h.button(
-            [
-              h.Class('btn btn-red btn-compact'),
-              h.Type('button'),
-              h.OnClick(Message.ClickedConfirmDeleteGame({ code: entry.code })),
-            ],
-            [
-              entry.status === 'YourTurn' || entry.status === 'Waiting'
-                ? 'Leave'
-                : 'Delete',
-            ],
-          ),
-        ],
-      ),
-    ],
+// NOTE: Deleting asks once, in the shared confirm dialog, since what it does
+// depends on the game (see deletePrompt).
+const confirmDelete = (entry: MenuEntry, h: HtmlBuilder<Message>): Html => {
+  const prompt = deletePrompt(entry.status)
+  return confirmDialog(
+    {
+      details: [
+        confirmEyebrow(entry.status === 'Lobby' ? 'Lobby' : 'Game', h),
+        confirmChip(entry.code, h),
+      ],
+      title: prompt.title,
+      body: [h.p([], [prompt.body])],
+      actions: [
+        h.button(
+          [
+            h.Class('btn btn-cream'),
+            h.Type('button'),
+            h.OnClick(Message.ClickedCancelDeleteGame()),
+          ],
+          ['Cancel'],
+        ),
+        h.button(
+          [
+            h.Class('btn btn-red'),
+            h.Type('button'),
+            h.OnClick(Message.ClickedConfirmDeleteGame({ code: entry.code })),
+          ],
+          [prompt.action],
+        ),
+      ],
+      onDismiss: Message.ClickedCancelDeleteGame(),
+    },
+    h,
   )
+}
 
 const entryRow = (
   entry: MenuEntry,
@@ -152,47 +150,43 @@ const entryRow = (
   h.keyed('li')(
     entry.code,
     [h.Class(`menu-game is-${entry.status.toLowerCase()}`)],
-    Option.contains(context.maybeConfirmingDelete, entry.code)
-      ? [confirmDelete(entry, h)]
-      : [
-          h.a(
-            [h.Class('menu-game-link'), h.Href(gamePath(entry.code))],
+    [
+      h.a(
+        [h.Class('menu-game-link'), h.Href(gamePath(entry.code))],
+        [
+          h.span(
+            [h.Class('menu-game-stub')],
             [
               h.span(
-                [h.Class('menu-game-stub')],
-                [
-                  h.span(
-                    [h.Class('menu-game-kind')],
-                    [entry.status === 'Lobby' ? 'Lobby' : 'Game'],
-                  ),
-                  h.span([h.Class('menu-game-code')], [entry.code]),
-                ],
+                [h.Class('menu-game-kind')],
+                [entry.status === 'Lobby' ? 'Lobby' : 'Game'],
               ),
-              h.span(
-                [h.Class('menu-game-body')],
-                [
-                  h.span(
-                    [h.Class(`menu-game-pill ${pillTone(entry)}`)],
-                    [entryDetail(entry)],
-                  ),
-                  h.span(
-                    [h.Class('menu-game-names')],
-                    [entry.seatNames.join(', ')],
-                  ),
-                ],
-              ),
+              h.span([h.Class('menu-game-code')], [entry.code]),
             ],
           ),
-          h.div(
-            [h.Class('menu-game-actions')],
+          h.span(
+            [h.Class('menu-game-body')],
             [
-              entry.status === 'Waiting'
-                ? pingButton(entry, context, h)
-                : h.empty,
-              deleteButton(entry, h),
+              h.span(
+                [h.Class(`menu-game-pill ${pillTone(entry)}`)],
+                [entryDetail(entry)],
+              ),
+              h.span(
+                [h.Class('menu-game-names')],
+                [entry.seatNames.join(', ')],
+              ),
             ],
           ),
         ],
+      ),
+      h.div(
+        [h.Class('menu-game-actions')],
+        [
+          entry.status === 'Waiting' ? pingButton(entry, context, h) : h.empty,
+          deleteButton(entry, h),
+        ],
+      ),
+    ],
   )
 
 type Section = Readonly<{
@@ -288,6 +282,12 @@ const loadedView = (
 ): ReadonlyArray<Html> => [
   ...gameSections(menu, context, h),
   statsCard(menu.stats, h),
+  Option.match(
+    Option.flatMap(context.maybeConfirmingDelete, code =>
+      Array.findFirst(menu.games, entry => entry.code === code),
+    ),
+    { onNone: () => h.empty, onSome: entry => confirmDelete(entry, h) },
+  ),
 ]
 
 export const menuView = (
