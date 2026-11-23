@@ -6,11 +6,16 @@ import {
   type MenuEntry,
   PAST_GAME_TTL_MS,
   decodeMenuEntry,
+  decodePushNotice,
   decodeSeatResult,
   encodeMenu,
   encodeMenuEntry,
 } from '../src/protocol'
 import type { Env } from './env'
+import { type PushSubscriptionKeys, type VapidKeys, sendPush } from './push'
+
+// NOTE: In tests, subscriptions on this host are recorded instead of sent.
+export const TEST_PUSH_ORIGIN = 'https://push.test'
 
 // NOTE: One PlayerDO per device. The first request from a device stores a
 // hash of its secret (trust on first use); every later request must present
@@ -30,7 +35,9 @@ const sha256Hex = async (text: string): Promise<string> => {
 }
 
 const isPast = (entry: MenuEntry): boolean =>
-  entry.status === 'Finished' || entry.status === 'Left' || entry.status === 'Gone'
+  entry.status === 'Finished' ||
+  entry.status === 'Left' ||
+  entry.status === 'Gone'
 
 type StatsRow = Readonly<{
   games_played: number
@@ -57,6 +64,12 @@ export class PlayerDO extends DurableObject<Env> {
       sql.exec(
         'CREATE TABLE IF NOT EXISTS recorded (result_key TEXT PRIMARY KEY, at INTEGER NOT NULL)',
       )
+      sql.exec(
+        'CREATE TABLE IF NOT EXISTS subscriptions (endpoint TEXT PRIMARY KEY, p256dh TEXT NOT NULL, auth TEXT NOT NULL, created_at INTEGER NOT NULL)',
+      )
+      sql.exec(
+        'CREATE TABLE IF NOT EXISTS outbox (seq INTEGER PRIMARY KEY AUTOINCREMENT, endpoint TEXT NOT NULL, json TEXT NOT NULL, bytes INTEGER NOT NULL)',
+      )
     })
   }
 
@@ -68,7 +81,9 @@ export class PlayerDO extends DurableObject<Env> {
     }
     const hash = await sha256Hex(secret)
     const rows = this.ctx.storage.sql
-      .exec<{ secret_hash: string }>('SELECT secret_hash FROM identity WHERE id = 1')
+      .exec<{ secret_hash: string }>(
+        'SELECT secret_hash FROM identity WHERE id = 1',
+      )
       .toArray()
     const stored = rows[0]
     if (stored === undefined) {
@@ -109,14 +124,15 @@ export class PlayerDO extends DurableObject<Env> {
       onNone: () => undefined,
       onSome: entry =>
         this.writeEntry({
-            ...entry,
-            status: entry.status === 'Left' ? 'Left' : 'Gone',
-            maybeReason: Option.some(reason),
-            updatedAt: entry.status === 'Finished' || entry.status === 'Left'
+          ...entry,
+          status: entry.status === 'Left' ? 'Left' : 'Gone',
+          maybeReason: Option.some(reason),
+          updatedAt:
+            entry.status === 'Finished' || entry.status === 'Left'
               ? entry.updatedAt
               : at,
-            maybePingAvailableAt: Option.none(),
-          }),
+          maybePingAvailableAt: Option.none(),
+        }),
     })
   }
 
@@ -132,7 +148,9 @@ export class PlayerDO extends DurableObject<Env> {
     const entries = Array.getSomes(
       Array.map(
         sql
-          .exec<{ json: string }>('SELECT json FROM games ORDER BY updated_at DESC')
+          .exec<{ json: string }>(
+            'SELECT json FROM games ORDER BY updated_at DESC',
+          )
           .toArray(),
         row => decodeMenuEntry(row.json),
       ),
@@ -195,5 +213,92 @@ export class PlayerDO extends DurableObject<Env> {
         return true
       },
     })
+  }
+
+  // PUSH
+
+  async addSubscription(
+    endpoint: string,
+    p256dh: string,
+    auth: string,
+  ): Promise<void> {
+    this.ctx.storage.sql.exec(
+      'INSERT INTO subscriptions (endpoint, p256dh, auth, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (endpoint) DO UPDATE SET p256dh = excluded.p256dh, auth = excluded.auth',
+      endpoint,
+      p256dh,
+      auth,
+      Date.now(),
+    )
+  }
+
+  async removeSubscription(endpoint: string): Promise<void> {
+    this.ctx.storage.sql.exec(
+      'DELETE FROM subscriptions WHERE endpoint = ?',
+      endpoint,
+    )
+  }
+
+  private vapidKeys(): Option.Option<VapidKeys> {
+    const { VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT } = this.env
+    return VAPID_PUBLIC_KEY !== undefined && VAPID_PRIVATE_KEY !== undefined
+      ? Option.some({
+          publicKey: VAPID_PUBLIC_KEY,
+          privateKey: VAPID_PRIVATE_KEY,
+          subject: VAPID_SUBJECT ?? 'mailto:all-aboard@example.invalid',
+        })
+      : Option.none()
+  }
+
+  // NOTE: Sends one notice to every push subscription on this device, and
+  // forgets subscriptions the push service says are gone.
+  async notify(noticeJson: string): Promise<number> {
+    const maybeNotice = decodePushNotice(noticeJson)
+    const maybeKeys = this.vapidKeys()
+    if (Option.isNone(maybeNotice) || Option.isNone(maybeKeys)) {
+      return 0
+    }
+    const sql = this.ctx.storage.sql
+    const subscriptions = sql
+      .exec<PushSubscriptionKeys>(
+        'SELECT endpoint, p256dh, auth FROM subscriptions',
+      )
+      .toArray()
+    const isTest = this.env.TEST_HOOKS === '1'
+    const outcomes = await Promise.all(
+      subscriptions.map(subscription =>
+        sendPush(subscription, noticeJson, maybeKeys.value, async request => {
+          if (isTest && subscription.endpoint.startsWith(TEST_PUSH_ORIGIN)) {
+            const body = new Uint8Array(await request.arrayBuffer())
+            sql.exec(
+              'INSERT INTO outbox (endpoint, json, bytes) VALUES (?, ?, ?)',
+              subscription.endpoint,
+              noticeJson,
+              body.length,
+            )
+            return new Response(null, { status: 201 })
+          }
+          return fetch(request)
+        }).then(outcome => {
+          if (outcome === 'Expired') {
+            sql.exec(
+              'DELETE FROM subscriptions WHERE endpoint = ?',
+              subscription.endpoint,
+            )
+          }
+          return outcome
+        }),
+      ),
+    )
+    return outcomes.filter(outcome => outcome === 'Sent').length
+  }
+
+  async testOutbox(): Promise<ReadonlyArray<string>> {
+    if (this.env.TEST_HOOKS !== '1') {
+      throw new Error('Test hooks are off.')
+    }
+    return this.ctx.storage.sql
+      .exec<{ json: string }>('SELECT json FROM outbox ORDER BY seq')
+      .toArray()
+      .map(row => row.json)
   }
 }

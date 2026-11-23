@@ -165,3 +165,28 @@ export const encodeSeatResult = Schema.encodeSync(SeatResultJson)
 export const decodeSeatResult = Schema.decodeUnknownOption(SeatResultJson)
 
 export const PAST_GAME_TTL_MS = 7 * 24 * 60 * 60 * 1000
+
+// PUSH
+
+export const PushNotice = Schema.Struct({
+  title: Schema.String,
+  body: Schema.String,
+  url: Schema.String,
+  tag: Schema.String,
+})
+export type PushNotice = typeof PushNotice.Type
+
+export const PushNoticeJson = Schema.fromJsonString(PushNotice)
+export const encodePushNotice = Schema.encodeSync(PushNoticeJson)
+export const decodePushNotice = Schema.decodeUnknownOption(PushNoticeJson)
+
+export const PushSubscriptionRequest = Schema.Struct({
+  endpoint: Schema.String,
+  keys: Schema.Struct({ p256dh: Schema.String, auth: Schema.String }),
+})
+export type PushSubscriptionRequest = typeof PushSubscriptionRequest.Type
+
+export const PushConfig = Schema.Struct({ publicKey: Schema.String })
+export type PushConfig = typeof PushConfig.Type
+
+export const PING_COOLDOWN_MS = 60 * 60 * 1000

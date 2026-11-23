@@ -1,4 +1,13 @@
-import { Duration, Effect, Match, Option, Random, Schema } from 'effect'
+import {
+  Clock,
+  Duration,
+  Effect,
+  Match,
+  Option,
+  Random,
+  Schema,
+  Stream,
+} from 'effect'
 import {
   Command,
   Dom,
@@ -13,8 +22,20 @@ import { defineTaggedUnion } from 'foldkit/schema'
 import { modifyFields } from 'foldkit/struct'
 import { toString as urlToString } from 'foldkit/url'
 
-import { Device, authHeaders, loadDevice, loadPlayerName, savePlayerName } from './device'
-import { PlayerAction, clampSeatCount, isBotTurn, maybeTurnStep } from './domain/game'
+import {
+  Device,
+  authHeaders,
+  loadDevice,
+  loadPlayerName,
+  savePlayerName,
+} from './device'
+import {
+  PlayerAction,
+  clampSeatCount,
+  isBotTurn,
+  maybeTurnStep,
+} from './domain/game'
+import { seatResult } from './domain/results'
 import {
   LOCAL_SEAT,
   LocalTable,
@@ -24,9 +45,13 @@ import {
   localTableView,
   playLocalBot,
 } from './localTable'
+import {
+  FetchMenu,
+  MenuState,
+  QueueLocalResult,
+  menuAfterFailure,
+} from './menuSync'
 import { Message } from './message'
-import { FetchMenu, MenuState, QueueLocalResult, menuAfterFailure } from './menuSync'
-import { seatResult } from './domain/results'
 import { TurnStep } from './model'
 import {
   Connection,
@@ -43,6 +68,7 @@ import {
   wantsSocket,
   withNotice,
 } from './online'
+import { PingGameFromMenu, pingStatus } from './pings'
 import {
   ClientMessage,
   CreateGameResponse,
@@ -51,11 +77,17 @@ import {
   isValidCode,
   normalizeCode,
 } from './protocol'
+import {
+  CheckNotifications,
+  EnableNotifications,
+  NotificationStatus,
+  notificationsView,
+} from './push'
 import { AppRoute, gamePath, urlToAppRoute } from './route'
 import { CreateState, Home, emptyHome, homeView } from './screens/home'
 import { lobbyView, messageScreen } from './screens/lobby'
 import { menuView } from './screens/menu'
-import { PingStatus, TableMode, makeTable } from './table'
+import { TableMode, makeTable } from './table'
 import { tableView } from './view'
 
 export { Message } from './message'
@@ -76,15 +108,21 @@ export const Model = Schema.Struct({
   seatCount: Schema.Number,
   device: Device,
   menu: MenuState,
+  now: Schema.Number,
+  notifications: NotificationStatus,
 })
 export type Model = typeof Model.Type
 
-export const Flags = Schema.Struct({ playerName: Schema.String, device: Device })
+export const Flags = Schema.Struct({
+  playerName: Schema.String,
+  device: Device,
+  now: Schema.Number,
+})
 export type Flags = typeof Flags.Type
 
 export const flags: Effect.Effect<Flags> = Effect.map(
-  Effect.zip(loadDevice, loadPlayerName),
-  ([device, playerName]) => ({ playerName, device }),
+  Effect.all([loadDevice, loadPlayerName, Clock.currentTimeMillis]),
+  ([device, playerName, now]) => ({ playerName, device, now }),
 )
 
 const DEFAULT_SEAT_COUNT = 3
@@ -115,7 +153,8 @@ export const WaitForBot = Command.define('WaitForBot', {
 export const Navigate = Command.define('Navigate', {
   args: { url: Schema.String },
   messages: [Message.CompletedNavigate],
-  execute: ({ url }) => pushUrl(url).pipe(Effect.as(Message.CompletedNavigate())),
+  execute: ({ url }) =>
+    pushUrl(url).pipe(Effect.as(Message.CompletedNavigate())),
 })
 
 export const LoadExternal = Command.define('LoadExternal', {
@@ -141,7 +180,10 @@ export const CreateFriendGame = Command.define('CreateFriendGame', {
       const response = yield* Effect.tryPromise(() =>
         fetch('/api/games', {
           method: 'POST',
-          headers: { ...authHeaders(device), 'content-type': 'application/json' },
+          headers: {
+            ...authHeaders(device),
+            'content-type': 'application/json',
+          },
           body: JSON.stringify({ name }),
         }),
       )
@@ -200,11 +242,14 @@ const fetchMenu = (model: Model) => FetchMenu({ device: model.device })
 const screenForRoute = (model: Model, route: AppRoute): Screen =>
   AppRoute.match<Screen>(route, {
     Home: () =>
-      model.screen._tag === 'Local' ? model.screen : Screen.Home({ home: emptyHome }),
+      model.screen._tag === 'Local'
+        ? model.screen
+        : Screen.Home({ home: emptyHome }),
     NotFound: () => Screen.Home({ home: emptyHome }),
     Game: ({ code }) => {
       const normalized = normalizeCode(code)
-      return model.screen._tag === 'Online' && model.screen.game.code === normalized
+      return model.screen._tag === 'Online' &&
+        model.screen.game.code === normalized
         ? model.screen
         : Screen.Online({ game: openOnlineGame(normalized, model.playerName) })
     },
@@ -251,7 +296,9 @@ const scheduleLocalBot = (model: Model, table: LocalTable): UpdateReturn => {
 const startLocalGame = (model: Model): UpdateReturn => ({
   model: withScreen(
     model,
-    Screen.Local({ table: emptyLocalTable(model.seatCount, displayName(model)) }),
+    Screen.Local({
+      table: emptyLocalTable(model.seatCount, displayName(model)),
+    }),
   ),
   commands: [RollSeed()],
 })
@@ -297,7 +344,8 @@ const modifyHoveredRoute = (
         model,
         Screen.Local({
           table: modifyFields(table, {
-            ui: ui => modifyFields(ui, { maybeHoveredRouteId: () => maybeRouteId }),
+            ui: ui =>
+              modifyFields(ui, { maybeHoveredRouteId: () => maybeRouteId }),
           }),
         }),
       ),
@@ -306,7 +354,8 @@ const modifyHoveredRoute = (
       model: withOnlineGame(
         model,
         modifyFields(game, {
-          ui: ui => modifyFields(ui, { maybeHoveredRouteId: () => maybeRouteId }),
+          ui: ui =>
+            modifyFields(ui, { maybeHoveredRouteId: () => maybeRouteId }),
         }),
       ),
     }),
@@ -330,13 +379,22 @@ const receiveServerMessage = (
 ): UpdateReturn =>
   ServerMessage.match<UpdateReturn>(message, {
     Rejected: ({ reason }) => ({
-      model: withOnlineGame(model, withNotice(game, Option.some(reason))),
+      model: withOnlineGame(
+        model,
+        withNotice(
+          modifyFields(game, { isPinging: () => false }),
+          Option.some(reason),
+        ),
+      ),
     }),
     Snapshot: ({ snapshot }) => {
       const isFirstLobbyView =
         snapshot._tag === 'Lobby' &&
         !snapshot.isViewerSeated &&
-        !Option.exists(game.maybeSnapshot, previous => previous._tag === 'Lobby')
+        !Option.exists(
+          game.maybeSnapshot,
+          previous => previous._tag === 'Lobby',
+        )
       const freeTone = isFirstLobbyView
         ? Option.getOrElse(
             Option.fromNullishOr(
@@ -354,6 +412,7 @@ const receiveServerMessage = (
             maybeSnapshot: () => Option.some(snapshot),
             connection: () => Connection.Open(),
             joinTone: () => freeTone,
+            isPinging: () => false,
           }),
         ),
       }
@@ -372,7 +431,10 @@ export const update = (model: Model, message: Message) =>
           model,
           commands: [Navigate({ url: urlToString(url) })],
         }),
-        External: ({ href }) => ({ model, commands: [LoadExternal({ url: href })] }),
+        External: ({ href }) => ({
+          model,
+          commands: [LoadExternal({ url: href })],
+        }),
       }),
 
     ChangedUrl: ({ url }) => {
@@ -415,7 +477,12 @@ export const update = (model: Model, message: Message) =>
                 }),
               }),
             ),
-            commands: [CreateFriendGame({ name: displayName(model), device: model.device })],
+            commands: [
+              CreateFriendGame({
+                name: displayName(model),
+                device: model.device,
+              }),
+            ],
           }
         : { model },
 
@@ -447,7 +514,9 @@ export const update = (model: Model, message: Message) =>
             model: withScreen(
               model,
               Screen.Home({
-                home: modifyFields(model.screen.home, { joinCode: () => value }),
+                home: modifyFields(model.screen.home, {
+                  joinCode: () => value,
+                }),
               }),
             ),
           }
@@ -511,25 +580,61 @@ export const update = (model: Model, message: Message) =>
 
     CompletedQueueLocalResult: () => ({ model }),
 
-    ClickedMenuPing: () => ({ model }),
+    ClickedMenuPing: ({ code }) => ({
+      model,
+      commands: [PingGameFromMenu({ code, device: model.device })],
+    }),
 
-    ClickedPing: () => onOnline(model, game => sendFromOnline(model, game, ClientMessage.Ping())),
+    CompletedMenuPing: () => ({ model, commands: [fetchMenu(model)] }),
+
+    TickedClock: ({ now }) => ({
+      model: modifyFields(model, { now: () => now }),
+    }),
+
+    CheckedNotifications: ({ status }) => ({
+      model: modifyFields(model, { notifications: () => status }),
+    }),
+
+    ClickedEnableNotifications: () => ({
+      model: modifyFields(model, {
+        notifications: () => NotificationStatus.Working(),
+      }),
+      commands: [EnableNotifications({ device: model.device })],
+    }),
+
+    ClickedPing: () =>
+      onOnline(model, game =>
+        sendFromOnline(
+          model,
+          modifyFields(game, { isPinging: () => true }),
+          ClientMessage.Ping(),
+        ),
+      ),
 
     ClickedLeaveGame: () =>
-      onOnline(model, game => sendFromOnline(model, game, ClientMessage.LeaveGame())),
+      onOnline(model, game =>
+        sendFromOnline(model, game, ClientMessage.LeaveGame()),
+      ),
 
     ClickedRematch: () =>
-      onOnline(model, game => sendFromOnline(model, game, ClientMessage.OpenRematch())),
+      onOnline(model, game =>
+        sendFromOnline(model, game, ClientMessage.OpenRematch()),
+      ),
 
-    HoveredRoute: ({ routeId }) => modifyHoveredRoute(model, Option.some(routeId)),
+    HoveredRoute: ({ routeId }) =>
+      modifyHoveredRoute(model, Option.some(routeId)),
 
     UnhoveredRoute: () => modifyHoveredRoute(model, Option.none()),
 
     PressedKey: ({ key }) =>
       Match.value(key.toLowerCase()).pipe(
         Match.withReturnType<UpdateReturn>(),
-        Match.when('d', () => takeTableAction(model, PlayerAction.DrewFromDeck())),
-        Match.when('t', () => takeTableAction(model, PlayerAction.DrewTicket())),
+        Match.when('d', () =>
+          takeTableAction(model, PlayerAction.DrewFromDeck()),
+        ),
+        Match.when('t', () =>
+          takeTableAction(model, PlayerAction.DrewTicket()),
+        ),
         Match.when(
           (pressed: string) => MARKET_KEYS.includes(pressed),
           pressed =>
@@ -560,7 +665,10 @@ export const update = (model: Model, message: Message) =>
 
     UpdatedJoinName: ({ value }) =>
       onOnline(model, game => ({
-        model: withOnlineGame(model, modifyFields(game, { joinName: () => value })),
+        model: withOnlineGame(
+          model,
+          modifyFields(game, { joinName: () => value }),
+        ),
       })),
 
     ClickedTone: ({ tone }) =>
@@ -572,7 +680,10 @@ export const update = (model: Model, message: Message) =>
         return isSeated
           ? sendFromOnline(model, game, ClientMessage.ChangeTone({ tone }))
           : {
-              model: withOnlineGame(model, modifyFields(game, { joinTone: () => tone })),
+              model: withOnlineGame(
+                model,
+                modifyFields(game, { joinTone: () => tone }),
+              ),
             }
       }),
 
@@ -593,7 +704,9 @@ export const update = (model: Model, message: Message) =>
       }),
 
     ClickedAddBot: () =>
-      onOnline(model, game => sendFromOnline(model, game, ClientMessage.AddBot())),
+      onOnline(model, game =>
+        sendFromOnline(model, game, ClientMessage.AddBot()),
+      ),
 
     ClickedRemoveSeat: ({ seatIndex }) =>
       onOnline(model, game =>
@@ -601,14 +714,20 @@ export const update = (model: Model, message: Message) =>
       ),
 
     ClickedStartGame: () =>
-      onOnline(model, game => sendFromOnline(model, game, ClientMessage.StartGame())),
+      onOnline(model, game =>
+        sendFromOnline(model, game, ClientMessage.StartGame()),
+      ),
 
     ClickedLeaveLobby: () =>
       onOnline(model, game => {
         const sent = sendFromOnline(model, game, ClientMessage.LeaveGame())
         return {
           model: goHome(sent.model),
-          commands: [...(sent.commands ?? []), Navigate({ url: '/' }), fetchMenu(model)],
+          commands: [
+            ...(sent.commands ?? []),
+            Navigate({ url: '/' }),
+            fetchMenu(model),
+          ],
         }
       }),
 
@@ -618,7 +737,10 @@ export const update = (model: Model, message: Message) =>
       ),
 
     ClickedShareInvite: () =>
-      onOnline(model, game => ({ model, commands: [ShareInvite({ code: game.code })] })),
+      onOnline(model, game => ({
+        model,
+        commands: [ShareInvite({ code: game.code })],
+      })),
 
     CompletedShareInvite: () => ({ model }),
 
@@ -634,9 +756,11 @@ export const update = (model: Model, message: Message) =>
 
     ReleasedGameSocket: () => ({ model }),
 
-    FailedConnectGameSocket: () => onOnline(model, game => scheduleReconnect(model, game)),
+    FailedConnectGameSocket: () =>
+      onOnline(model, game => scheduleReconnect(model, game)),
 
-    DisconnectedGameSocket: () => onOnline(model, game => scheduleReconnect(model, game)),
+    DisconnectedGameSocket: () =>
+      onOnline(model, game => scheduleReconnect(model, game)),
 
     CompletedWaitToReconnect: ({ code, attempt }) =>
       onOnline(model, game =>
@@ -678,77 +802,103 @@ export const init: Runtime.RoutingApplicationInit<Model, Message, Flags> = (
     seatCount: DEFAULT_SEAT_COUNT,
     device: initialFlags.device,
     menu: MenuState.Loading(),
+    now: initialFlags.now,
+    notifications: NotificationStatus.Checking(),
   }
   const screen = screenForRoute(base, route)
   return {
     model: withScreen(base, screen),
-    commands: screen._tag === 'Home' ? [fetchMenu(base)] : [],
+    commands: [
+      CheckNotifications(),
+      ...(screen._tag === 'Home' ? [fetchMenu(base)] : []),
+    ],
   }
 }
 
 // MANAGED RESOURCE
 
-export const managedResources = ManagedResource.make<Model, Message>()(entry => ({
-  gameSocket: entry(SocketRequirements, {
-    resource: GameSocket,
-    modelToMaybeRequirements: model =>
-      model.screen._tag === 'Online' && wantsSocket(model.screen.game)
-        ? Option.some({
-            code: model.screen.game.code,
-            attempt: model.screen.game.attempt,
-            device: model.device,
-          })
-        : Option.none(),
-    acquire: acquireGameSocket,
-    release: releaseGameSocket,
-    onAcquired: () => Message.ConnectedGameSocket(),
-    onReleased: () => Message.ReleasedGameSocket(),
-    onAcquireError: error =>
-      Message.FailedConnectGameSocket({
-        error: error instanceof Error ? error.message : 'Unknown error',
-      }),
+export const managedResources = ManagedResource.make<Model, Message>()(
+  entry => ({
+    gameSocket: entry(SocketRequirements, {
+      resource: GameSocket,
+      modelToMaybeRequirements: model =>
+        model.screen._tag === 'Online' && wantsSocket(model.screen.game)
+          ? Option.some({
+              code: model.screen.game.code,
+              attempt: model.screen.game.attempt,
+              device: model.device,
+            })
+          : Option.none(),
+      acquire: acquireGameSocket,
+      release: releaseGameSocket,
+      onAcquired: () => Message.ConnectedGameSocket(),
+      onReleased: () => Message.ReleasedGameSocket(),
+      onAcquireError: error =>
+        Message.FailedConnectGameSocket({
+          error: error instanceof Error ? error.message : 'Unknown error',
+        }),
+    }),
   }),
-}))
+)
 
 // SUBSCRIPTION
 
 const SHORTCUT_KEYS = ['d', 't', ...MARKET_KEYS]
 
-export const subscriptions = Subscription.make<Model, Message, GameSocketService>()(
-  entry => ({
-    keyboardShortcuts: Subscription.persistentEntry(
-      Dom.streamFromEventFilterMap({
-        target: document,
-        type: 'keydown',
-        filterMapEvent: keyboardEvent =>
-          !keyboardEvent.metaKey &&
-          !keyboardEvent.ctrlKey &&
-          !keyboardEvent.altKey &&
-          !(keyboardEvent.target instanceof HTMLInputElement) &&
-          SHORTCUT_KEYS.includes(keyboardEvent.key.toLowerCase())
-            ? Option.some(Message.PressedKey({ key: keyboardEvent.key }))
-            : Option.none(),
+const CLOCK_INTERVAL = Duration.seconds(30)
+
+export const subscriptions = Subscription.make<
+  Model,
+  Message,
+  GameSocketService
+>()(entry => ({
+  // NOTE: Ping countdowns need the time; nothing else in the Model does.
+  clock: Subscription.persistentEntry(
+    Stream.tick(CLOCK_INTERVAL).pipe(
+      Stream.mapEffect(() =>
+        Clock.currentTimeMillis.pipe(
+          Effect.map(now => Message.TickedClock({ now })),
+        ),
+      ),
+    ),
+  ),
+  keyboardShortcuts: Subscription.persistentEntry(
+    Dom.streamFromEventFilterMap({
+      target: document,
+      type: 'keydown',
+      filterMapEvent: keyboardEvent =>
+        !keyboardEvent.metaKey &&
+        !keyboardEvent.ctrlKey &&
+        !keyboardEvent.altKey &&
+        !(keyboardEvent.target instanceof HTMLInputElement) &&
+        SHORTCUT_KEYS.includes(keyboardEvent.key.toLowerCase())
+          ? Option.some(Message.PressedKey({ key: keyboardEvent.key }))
+          : Option.none(),
+    }),
+  ),
+  gameSocket: entry(
+    { socketKey: Schema.String },
+    {
+      modelToDependencies: model => ({
+        socketKey:
+          model.screen._tag === 'Online' &&
+          model.screen.game.connection._tag === 'Open'
+            ? `${model.screen.game.code}#${model.screen.game.attempt}`
+            : '',
       }),
-    ),
-    gameSocket: entry(
-      { socketKey: Schema.String },
-      {
-        modelToDependencies: model => ({
-          socketKey:
-            model.screen._tag === 'Online' &&
-            model.screen.game.connection._tag === 'Open'
-              ? `${model.screen.game.code}#${model.screen.game.attempt}`
-              : '',
-        }),
-        dependenciesToStream: ({ socketKey }) => gameSocketStream(socketKey !== ''),
-      },
-    ),
-  }),
-)
+      dependenciesToStream: ({ socketKey }) =>
+        gameSocketStream(socketKey !== ''),
+    },
+  ),
+}))
 
 // VIEW
 
-const onlineView = (game: OnlineGame, h: HtmlBuilder<Message>): Document => {
+const onlineView = (
+  game: OnlineGame,
+  now: number,
+  h: HtmlBuilder<Message>,
+): Document => {
   const connecting = (): Document => ({
     title: 'All Aboard',
     body: messageScreen(
@@ -767,12 +917,15 @@ const onlineView = (game: OnlineGame, h: HtmlBuilder<Message>): Document => {
           title: `${lobby.code} · All Aboard`,
           body: lobbyView(game, lobby, h),
         }),
-        Table: ({ code, view }) =>
+        Table: table =>
           tableView(
             makeTable(
-              view,
+              table.view,
               game.ui,
-              TableMode.Online({ code, ping: PingStatus.Hidden() }),
+              TableMode.Online({
+                code: table.code,
+                ping: pingStatus(table, game.isPinging, now),
+              }),
             ),
             h,
           ),
@@ -795,10 +948,13 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document =>
       body: homeView(
         home,
         { playerName: model.playerName, seatCount: model.seatCount },
-        menuView(model.menu, { now: 0 }, h),
+        [
+          notificationsView(model.notifications, h),
+          ...menuView(model.menu, { now: model.now }, h),
+        ],
         h,
       ),
     }),
     Local: ({ table }) => tableView(localTableView(table), h),
-    Online: ({ game }) => onlineView(game, h),
+    Online: ({ game }) => onlineView(game, model.now, h),
   })

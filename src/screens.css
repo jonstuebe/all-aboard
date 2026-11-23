@@ -412,3 +412,26 @@
   font-size: 1.5rem;
   color: #3a2415;
 }
+
+/* NOTIFICATIONS: a quiet strip on the table between the new-game card and
+   the game lists. Empty when the device can't do push at all. */
+
+.notify-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 12px;
+  width: min(100%, 520px);
+}
+
+.notify-card:empty {
+  display: none;
+}
+
+.notify-note {
+  margin: 0;
+  color: var(--cream-muted);
+  font-size: 0.875rem;
+  text-align: center;
+}

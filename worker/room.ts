@@ -2,11 +2,17 @@ import { Array, Option, Result, Schema, pipe } from 'effect'
 import { defineTaggedUnion } from 'foldkit/schema'
 import { modifyFields } from 'foldkit/struct'
 
-import { projectView } from '../src/domain/clientView'
 import { playBotStep } from '../src/domain/bot'
+import { projectView } from '../src/domain/clientView'
 import { BOT_NAMES, actAs, isBotTurn, newGame } from '../src/domain/game'
-import { MAX_SEATS, MIN_SEATS, Model, type SeatConfig, TONE_COUNT } from '../src/model'
 import { seatResult, type SeatResult } from '../src/domain/results'
+import {
+  MAX_SEATS,
+  MIN_SEATS,
+  Model,
+  type SeatConfig,
+  TONE_COUNT,
+} from '../src/model'
 import {
   type ClientMessage,
   ClientMessage as ClientMessageUnion,
@@ -15,6 +21,8 @@ import {
   type MenuEntry,
   type MenuStatus,
   NAME_MAX_LENGTH,
+  PING_COOLDOWN_MS,
+  type PushNotice,
 } from '../src/protocol'
 
 // NOTE: A Room is everything a GameDO stores about one friend game: the lobby
@@ -72,7 +80,10 @@ const reject = (reason: string): RoomResult => Result.fail(reason)
 
 // QUERIES
 
-export const seatIndexOf = (room: Room, deviceId: string): Option.Option<number> =>
+export const seatIndexOf = (
+  room: Room,
+  deviceId: string,
+): Option.Option<number> =>
   Array.findFirstIndex(room.seats, seat =>
     Option.contains(seat.maybeDeviceId, deviceId),
   )
@@ -81,8 +92,9 @@ export const activeSeatIndexOf = (
   room: Room,
   deviceId: string,
 ): Option.Option<number> =>
-  Option.filter(seatIndexOf(room, deviceId), seatIndex =>
-    room.seats[seatIndex]?.hasLeft === false,
+  Option.filter(
+    seatIndexOf(room, deviceId),
+    seatIndex => room.seats[seatIndex]?.hasLeft === false,
   )
 
 export const humanDeviceIds = (room: Room): ReadonlyArray<string> =>
@@ -169,7 +181,9 @@ const modifySeat = (
 ): Room =>
   modifyFields(room, {
     seats: seats =>
-      Array.map(seats, (seat, index) => (index === seatIndex ? modify(seat) : seat)),
+      Array.map(seats, (seat, index) =>
+        index === seatIndex ? modify(seat) : seat,
+      ),
   })
 
 const joinLobby = (
@@ -321,14 +335,16 @@ export const hasHumans = (room: Room): boolean =>
 
 // START
 
-const seatConfigs = (seats: ReadonlyArray<RoomSeat>): ReadonlyArray<SeatConfig> =>
-  Array.map(seats, seat => ({ name: seat.name, kind: seat.kind, tone: seat.tone }))
+const seatConfigs = (
+  seats: ReadonlyArray<RoomSeat>,
+): ReadonlyArray<SeatConfig> =>
+  Array.map(seats, seat => ({
+    name: seat.name,
+    kind: seat.kind,
+    tone: seat.tone,
+  }))
 
-const startGame = (
-  room: Room,
-  deviceId: string,
-  seed: number,
-): RoomResult => {
+const startGame = (room: Room, deviceId: string, seed: number): RoomResult => {
   if (!isLobbyPhase(room)) {
     return reject('This game already started.')
   }
@@ -345,7 +361,8 @@ const startGame = (
   return accept(
     modifyFields(room, {
       phase: () => 'Playing',
-      seats: () => Array.map(seats, seat => modifyFields(seat, { isReady: () => false })),
+      seats: () =>
+        Array.map(seats, seat => modifyFields(seat, { isReady: () => false })),
       generation: generation =>
         room.phase === 'RematchLobby' ? generation + 1 : generation,
       maybeGame: () => Option.some(newGame(seed, seatConfigs(seats))),
@@ -389,6 +406,71 @@ const takeAction = (
   })
 }
 
+// PING
+
+// NOTE: When this device may next ping, if pinging makes sense at all: the
+// game is in progress, the device has a seat, and the turn belongs to some
+// other person (not a bot) who is still in the game.
+export const pingAvailableAt = (
+  room: Room,
+  deviceId: string,
+): Option.Option<number> => {
+  if (room.phase !== 'Playing') {
+    return Option.none()
+  }
+  return Option.flatMap(activeSeatIndexOf(room, deviceId), seatIndex =>
+    Option.flatMap(room.maybeGame, game => {
+      const target = room.seats[game.currentPlayerIndex]
+      const isPingable =
+        game.currentPlayerIndex !== seatIndex &&
+        target !== undefined &&
+        target.kind === 'Human' &&
+        !target.hasLeft
+      return isPingable
+        ? Option.some(
+            Option.match(
+              Array.findFirst(
+                room.pings,
+                record => record.deviceId === deviceId,
+              ),
+              {
+                onNone: () => 0,
+                onSome: record => record.at + PING_COOLDOWN_MS,
+              },
+            ),
+          )
+        : Option.none()
+    }),
+  )
+}
+
+export const pingTarget = (room: Room): Option.Option<string> =>
+  Option.flatMap(room.maybeGame, game =>
+    Option.flatMap(
+      Array.get(room.seats, game.currentPlayerIndex),
+      seat => seat.maybeDeviceId,
+    ),
+  )
+
+const ping = (room: Room, deviceId: string, now: number): RoomResult =>
+  Option.match(pingAvailableAt(room, deviceId), {
+    onNone: () => reject('There is nobody to ping right now.'),
+    onSome: availableAt =>
+      now < availableAt
+        ? reject(
+            `You can ping again in ${Math.ceil((availableAt - now) / 60_000)} minutes.`,
+          )
+        : accept(
+            modifyFields(room, {
+              pings: pings =>
+                Array.append(
+                  Array.filter(pings, record => record.deviceId !== deviceId),
+                  { deviceId, at: now },
+                ),
+            }),
+          ),
+  })
+
 export type MessageContext = Readonly<{ now: number; seed: number }>
 
 export const applyClientMessage = (
@@ -405,7 +487,7 @@ export const applyClientMessage = (
       RemoveSeat: ({ seatIndex }) => removeSeat(room, deviceId, seatIndex),
       StartGame: () => startGame(room, deviceId, context.seed),
       TakeAction: action => takeAction(room, deviceId, action, context.now),
-      Ping: () => reject('Pings aren’t available yet.'),
+      Ping: () => ping(room, deviceId, context.now),
       LeaveGame: () =>
         isLobbyPhase(room)
           ? leaveLobby(room, deviceId)
@@ -414,7 +496,9 @@ export const applyClientMessage = (
       OpenRematch: () => reject('Rematches aren’t available yet.'),
     }),
     Result.map(next =>
-      message._tag === 'TakeAction' ? next : touch(next, context.now),
+      message._tag === 'TakeAction' || message._tag === 'Ping'
+        ? next
+        : touch(next, context.now),
     ),
   )
 
@@ -456,7 +540,10 @@ export const snapshotFor = (room: Room, deviceId: string): GameSnapshot => {
       }),
     onSome: seatIndex =>
       room.seats[seatIndex]?.hasLeft
-        ? GameSnapshot.Closed({ code: room.code, reason: 'You left this game.' })
+        ? GameSnapshot.Closed({
+            code: room.code,
+            reason: 'You left this game.',
+          })
         : Option.match(room.maybeGame, {
             onNone: () =>
               GameSnapshot.Closed({
@@ -467,8 +554,8 @@ export const snapshotFor = (room: Room, deviceId: string): GameSnapshot => {
               GameSnapshot.Table({
                 code: room.code,
                 view: projectView(game, seatIndex),
-                maybePingAvailableAt: Option.none(),
-                canPing: false,
+                maybePingAvailableAt: pingAvailableAt(room, deviceId),
+                canPing: Option.isSome(pingAvailableAt(room, deviceId)),
               }),
           }),
   })
@@ -491,7 +578,10 @@ const menuStatus = (room: Room, seatIndex: number): MenuStatus => {
   if (room.phase === 'Finished') {
     return 'Finished'
   }
-  return Option.exists(room.maybeGame, game => game.currentPlayerIndex === seatIndex)
+  return Option.exists(
+    room.maybeGame,
+    game => game.currentPlayerIndex === seatIndex,
+  )
     ? 'YourTurn'
     : 'Waiting'
 }
@@ -510,7 +600,10 @@ export const menuEntryFor = (
       maybeCurrentName:
         status === 'Waiting'
           ? Option.flatMap(room.maybeGame, game =>
-              Option.map(Array.get(game.players, game.currentPlayerIndex), player => player.name),
+              Option.map(
+                Array.get(game.players, game.currentPlayerIndex),
+                player => player.name,
+              ),
             )
           : Option.none(),
       updatedAt: Option.getOrElse(room.maybeFinishedAt, () => room.lastMoveAt),
@@ -519,11 +612,13 @@ export const menuEntryFor = (
           ? Option.flatMap(room.maybeGame, game => seatResult(game, seatIndex))
           : Option.none(),
       maybeReason: Option.none(),
-      maybePingAvailableAt: status === 'Waiting' ? maybePingAvailableAt : Option.none(),
+      maybePingAvailableAt:
+        status === 'Waiting' ? maybePingAvailableAt : Option.none(),
     }
   })
 
-export const resultKey = (room: Room): string => `${room.code}#${room.generation}`
+export const resultKey = (room: Room): string =>
+  `${room.code}#${room.generation}`
 
 // NOTE: The results to record when a game has just finished, one per human
 // still in it. Seats that left (now bots) don't count toward that person.
@@ -533,7 +628,10 @@ export const finishedResults = (
 ): ReadonlyArray<readonly [string, SeatResult]> => {
   const justFinished =
     after.phase === 'Finished' &&
-    !Option.exists(before, room => room.phase === 'Finished' && room.generation === after.generation)
+    !Option.exists(
+      before,
+      room => room.phase === 'Finished' && room.generation === after.generation,
+    )
   if (!justFinished) {
     return []
   }
@@ -574,7 +672,10 @@ const isBotToMove = (room: Room): boolean =>
 // one-week deletion of a finished game.
 export const nextAlarmAt = (room: Room, botDelayMs: number): number => {
   if (room.phase === 'Finished') {
-    return Option.getOrElse(room.maybeFinishedAt, () => room.lastMoveAt) + FINISHED_TTL_MS
+    return (
+      Option.getOrElse(room.maybeFinishedAt, () => room.lastMoveAt) +
+      FINISHED_TTL_MS
+    )
   }
   const lifecycleAt = Option.isNone(room.maybeWarnedAt)
     ? room.lastMoveAt + WARN_AFTER_MS
@@ -597,7 +698,9 @@ export type AlarmOutcome = typeof AlarmOutcome.Type
 const warnedDeviceIds = (room: Room): ReadonlyArray<string> => {
   if (room.phase === 'Playing') {
     return Option.match(
-      Option.flatMap(room.maybeGame, game => Array.get(room.seats, game.currentPlayerIndex)),
+      Option.flatMap(room.maybeGame, game =>
+        Array.get(room.seats, game.currentPlayerIndex),
+      ),
       {
         onNone: () => [],
         onSome: seat =>
@@ -617,27 +720,130 @@ export const runAlarm = (
 ): AlarmOutcome => {
   if (room.phase === 'Finished') {
     const expiresAt =
-      Option.getOrElse(room.maybeFinishedAt, () => room.lastMoveAt) + FINISHED_TTL_MS
+      Option.getOrElse(room.maybeFinishedAt, () => room.lastMoveAt) +
+      FINISHED_TTL_MS
     return now >= expiresAt
       ? AlarmOutcome.Deleted({ reason: REASON_FINISHED })
       : AlarmOutcome.Unchanged()
   }
   const isLobby = isLobbyPhase(room)
   if (now >= room.lastMoveAt + DELETE_AFTER_MS) {
-    return AlarmOutcome.Deleted({ reason: isLobby ? REASON_IDLE_LOBBY : REASON_IDLE_GAME })
+    return AlarmOutcome.Deleted({
+      reason: isLobby ? REASON_IDLE_LOBBY : REASON_IDLE_GAME,
+    })
   }
   if (isBotToMove(room) && now >= room.lastMoveAt + botDelayMs) {
     return Option.match(room.maybeGame, {
       onNone: () => AlarmOutcome.Unchanged(),
       onSome: game =>
-        AlarmOutcome.Updated({ room: touch(withGame(room, playBotStep(game), now), now) }),
+        AlarmOutcome.Updated({
+          room: touch(withGame(room, playBotStep(game), now), now),
+        }),
     })
   }
-  if (now >= room.lastMoveAt + WARN_AFTER_MS && Option.isNone(room.maybeWarnedAt)) {
+  if (
+    now >= room.lastMoveAt + WARN_AFTER_MS &&
+    Option.isNone(room.maybeWarnedAt)
+  ) {
     return AlarmOutcome.Warned({
       room: modifyFields(room, { maybeWarnedAt: () => Option.some(now) }),
       deviceIds: warnedDeviceIds(room),
     })
   }
   return AlarmOutcome.Unchanged()
+}
+
+// PUSH
+
+const gameUrl = (room: Room): string => `/g/${room.code}`
+
+const currentHumanDevice = (room: Room): Option.Option<string> =>
+  Option.flatMap(room.maybeGame, game =>
+    Option.flatMap(Array.get(room.seats, game.currentPlayerIndex), seat =>
+      seat.kind === 'Human' && !seat.hasLeft
+        ? seat.maybeDeviceId
+        : Option.none(),
+    ),
+  )
+
+export const turnNotice = (room: Room): PushNotice => ({
+  title: 'Your turn',
+  body: `It’s your move in ${room.code}.`,
+  url: gameUrl(room),
+  tag: `turn-${room.code}`,
+})
+
+export const pingNotice = (room: Room, fromName: string): PushNotice => ({
+  title: `${fromName} pinged you`,
+  body: `They’re waiting on your move in ${room.code}.`,
+  url: gameUrl(room),
+  tag: `ping-${room.code}`,
+})
+
+export const warningNotice = (room: Room): PushNotice => ({
+  title: 'Game about to be deleted',
+  body: isLobbyPhase(room)
+    ? `${room.code} hasn’t started and will be deleted in 24 hours.`
+    : `Nobody has moved in ${room.code} for 2 days. It will be deleted in 24 hours.`,
+  url: gameUrl(room),
+  tag: `warning-${room.code}`,
+})
+
+export const finalScoresNotice = (room: Room): Option.Option<PushNotice> =>
+  Option.flatMap(room.maybeGame, game =>
+    game.phase._tag === 'GameOver'
+      ? Option.some({
+          title: `Final scores · ${room.code}`,
+          body: Array.map(
+            game.phase.standings,
+            standing =>
+              `${game.players[standing.playerIndex]?.name ?? '?'} ${standing.total}`,
+          ).join(' · '),
+          url: gameUrl(room),
+          tag: `final-${room.code}`,
+        })
+      : Option.none(),
+  )
+
+// NOTE: The pushes one change causes. "Your turn" goes to the person the turn
+// just passed to. Final scores go to every person still in the game. Devices
+// that left the game never appear here.
+export const pushesForChange = (
+  maybeBefore: Option.Option<Room>,
+  after: Room,
+): ReadonlyArray<readonly [string, PushNotice]> => {
+  const turnPassed =
+    after.phase === 'Playing' &&
+    !Option.exists(
+      maybeBefore,
+      before =>
+        before.phase === 'Playing' &&
+        before.generation === after.generation &&
+        Option.exists(before.maybeGame, beforeGame =>
+          Option.exists(
+            after.maybeGame,
+            afterGame =>
+              afterGame.currentPlayerIndex === beforeGame.currentPlayerIndex,
+          ),
+        ),
+    )
+  const turnPushes = turnPassed
+    ? Option.match(currentHumanDevice(after), {
+        onNone: () => [],
+        onSome: deviceId => [[deviceId, turnNotice(after)] as const],
+      })
+    : []
+  const finalPushes = Array.isReadonlyArrayNonEmpty(
+    finishedResults(maybeBefore, after),
+  )
+    ? Option.match(finalScoresNotice(after), {
+        onNone: () => [],
+        onSome: notice =>
+          Array.map(
+            humanDeviceIds(after),
+            deviceId => [deviceId, notice] as const,
+          ),
+      })
+    : []
+  return [...turnPushes, ...finalPushes]
 }

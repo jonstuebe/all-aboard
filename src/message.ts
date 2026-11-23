@@ -4,6 +4,7 @@ import { UrlRequest } from 'foldkit/navigation'
 import { Url } from 'foldkit/url'
 
 import { TurnStep } from './model'
+import { NotificationStatus } from './notificationStatus'
 import { Menu, ServerMessage } from './protocol'
 
 export const Message = defineMessageUnion({
@@ -26,6 +27,12 @@ export const Message = defineMessageUnion({
   FailedFetchMenu: {},
   CompletedQueueLocalResult: {},
   ClickedMenuPing: { code: Schema.String },
+  CompletedMenuPing: { maybeReason: Schema.Option(Schema.String) },
+  TickedClock: { now: Schema.Number },
+
+  // NOTIFICATIONS
+  CheckedNotifications: { status: NotificationStatus },
+  ClickedEnableNotifications: {},
 
   // TABLE
   CompletedRollSeed: { seed: Schema.Number },

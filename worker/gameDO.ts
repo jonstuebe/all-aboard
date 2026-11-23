@@ -2,13 +2,15 @@ import { DurableObject } from 'cloudflare:workers'
 import { Option, Result } from 'effect'
 
 import {
-  type ClientMessage,
+  ClientMessage,
   GameSnapshot,
   ServerMessage,
   decodeClientMessage,
   encodeGameSnapshot,
   encodeMenuEntry,
+  encodePushNotice,
   encodeSeatResult,
+  type PushNotice,
   encodeServerMessage,
 } from '../src/protocol'
 import type { Env } from './env'
@@ -23,6 +25,11 @@ import {
   hasHumans,
   menuEntryFor,
   nextAlarmAt,
+  pingAvailableAt,
+  pingNotice,
+  pingTarget,
+  pushesForChange,
+  warningNotice,
   resultKey,
   runAlarm,
   seatedDeviceIds,
@@ -123,7 +130,14 @@ export class GameDO extends DurableObject<Env> {
   }
 
   // NOTE: Sends the 48-hour warning. Push delivery arrives with Web Push.
-  protected async warn(_room: Room, _deviceIds: ReadonlyArray<string>): Promise<void> {}
+  protected async warn(
+    room: Room,
+    deviceIds: ReadonlyArray<string>,
+  ): Promise<void> {
+    await Promise.all(
+      deviceIds.map(deviceId => this.push(deviceId, warningNotice(room))),
+    )
+  }
 
   // TEST HOOKS
 
@@ -145,7 +159,10 @@ export class GameDO extends DurableObject<Env> {
     if (this.env.TEST_HOOKS !== '1') {
       throw new Error('Test hooks are off.')
     }
-    return Option.match(this.maybeRoom, { onNone: () => null, onSome: encodeRoom })
+    return Option.match(this.maybeRoom, {
+      onNone: () => null,
+      onSome: encodeRoom,
+    })
   }
 
   protected save(room: Room): void {
@@ -172,7 +189,11 @@ export class GameDO extends DurableObject<Env> {
 
   // RPC
 
-  async create(code: string, hostDeviceId: string, hostName: string): Promise<boolean> {
+  async create(
+    code: string,
+    hostDeviceId: string,
+    hostName: string,
+  ): Promise<boolean> {
     if (Option.isSome(this.maybeRoom)) {
       return false
     }
@@ -224,14 +245,20 @@ export class GameDO extends DurableObject<Env> {
     return new Response(null, { status: 101, webSocket: client })
   }
 
-  async webSocketMessage(socket: WebSocket, raw: string | ArrayBuffer): Promise<void> {
+  async webSocketMessage(
+    socket: WebSocket,
+    raw: string | ArrayBuffer,
+  ): Promise<void> {
     const attachment = this.attachmentOf(socket)
     if (attachment === null || typeof raw !== 'string') {
       return
     }
     await Option.match(decodeClientMessage(raw), {
       onNone: async () =>
-        this.send(socket, ServerMessage.Rejected({ reason: 'That message wasn’t understood.' })),
+        this.send(
+          socket,
+          ServerMessage.Rejected({ reason: 'That message wasn’t understood.' }),
+        ),
       onSome: message => this.handle(socket, attachment.deviceId, message),
     })
   }
@@ -273,25 +300,77 @@ export class GameDO extends DurableObject<Env> {
     deviceId: string,
     message: ClientMessage,
   ): Promise<void> {
-    await Option.match(this.maybeRoom, {
-      onNone: async () =>
-        this.send(socket, ServerMessage.Rejected({ reason: 'This game doesn’t exist.' })),
-      onSome: async room =>
-        Result.match(
-          applyClientMessage(room, deviceId, message, {
-            now: this.now(),
-            seed: randomSeed(),
-          }),
-          {
-            onFailure: async reason =>
-              this.send(socket, ServerMessage.Rejected({ reason })),
-            onSuccess: async next => {
-              this.save(next)
-              this.logAction(next, Option.some(deviceId), message)
-              await this.afterChange(Option.some(room), next)
-            },
-          },
+    const result = await this.applyMessage(deviceId, message)
+    Result.match(result, {
+      onFailure: reason =>
+        this.send(socket, ServerMessage.Rejected({ reason })),
+      onSuccess: () => undefined,
+    })
+  }
+
+  // NOTE: The one path every client message takes, from a socket or HTTP.
+  private async applyMessage(
+    deviceId: string,
+    message: ClientMessage,
+  ): Promise<Result.Result<Room, string>> {
+    return Option.match(this.maybeRoom, {
+      onNone: async () => Result.fail('This game doesn’t exist.'),
+      onSome: async room => {
+        const result = applyClientMessage(room, deviceId, message, {
+          now: this.now(),
+          seed: randomSeed(),
+        })
+        if (Result.isSuccess(result)) {
+          const next = result.success
+          this.save(next)
+          this.logAction(next, Option.some(deviceId), message)
+          await this.afterChange(Option.some(room), next)
+          if (message._tag === 'Ping') {
+            await this.sendPing(next, deviceId)
+          }
+        }
+        return result
+      },
+    })
+  }
+
+  async pingFrom(deviceId: string): Promise<string | null> {
+    return Result.match(
+      await this.applyMessage(deviceId, ClientMessage.Ping()),
+      {
+        onFailure: reason => reason,
+        onSuccess: () => null,
+      },
+    )
+  }
+
+  // PUSH
+
+  private async push(deviceId: string, notice: PushNotice): Promise<void> {
+    await this.env.PLAYERS.getByName(deviceId).notify(encodePushNotice(notice))
+  }
+
+  private hasOpenSocket(deviceId: string): boolean {
+    return this.ctx
+      .getWebSockets()
+      .some(socket => this.attachmentOf(socket)?.deviceId === deviceId)
+  }
+
+  private async sendPing(room: Room, fromDeviceId: string): Promise<void> {
+    const fromName = Option.match(
+      Option.flatMap(
+        Option.fromNullishOr(
+          room.seats.find(seat =>
+            Option.contains(seat.maybeDeviceId, fromDeviceId),
+          ),
         ),
+        seat => Option.some(seat.name),
+      ),
+      { onNone: () => 'Someone', onSome: name => name },
+    )
+    await Option.match(pingTarget(room), {
+      onNone: async () => undefined,
+      onSome: deviceId => this.push(deviceId, pingNotice(room, fromName)),
     })
   }
 
@@ -301,7 +380,9 @@ export class GameDO extends DurableObject<Env> {
       if (attachment !== null) {
         this.send(
           socket,
-          ServerMessage.Snapshot({ snapshot: snapshotFor(room, attachment.deviceId) }),
+          ServerMessage.Snapshot({
+            snapshot: snapshotFor(room, attachment.deviceId),
+          }),
         )
       }
     })
@@ -318,15 +399,22 @@ export class GameDO extends DurableObject<Env> {
     const removedDevices = Option.match(maybeBefore, {
       onNone: () => [],
       onSome: before =>
-        seatedDeviceIds(before).filter(deviceId => !afterDevices.includes(deviceId)),
+        seatedDeviceIds(before).filter(
+          deviceId => !afterDevices.includes(deviceId),
+        ),
     })
     await Promise.all([
       ...afterDevices.map(deviceId =>
-        Option.match(menuEntryFor(after, deviceId, Option.none()), {
-          onNone: async () => undefined,
-          onSome: entry =>
-            this.env.PLAYERS.getByName(deviceId).upsertGame(encodeMenuEntry(entry)),
-        }),
+        Option.match(
+          menuEntryFor(after, deviceId, pingAvailableAt(after, deviceId)),
+          {
+            onNone: async () => undefined,
+            onSome: entry =>
+              this.env.PLAYERS.getByName(deviceId).upsertGame(
+                encodeMenuEntry(entry),
+              ),
+          },
+        ),
       ),
       ...removedDevices.map(deviceId =>
         this.env.PLAYERS.getByName(deviceId).removeGame(after.code),
@@ -346,7 +434,18 @@ export class GameDO extends DurableObject<Env> {
   ): Promise<void> {
     await this.syncPlayers(maybeBefore, after)
     this.broadcast(after)
-    if (!hasHumans(after) && (after.phase === 'Lobby' || after.phase === 'RematchLobby')) {
+    await Promise.all(
+      pushesForChange(maybeBefore, after)
+        .filter(
+          ([deviceId, notice]) =>
+            !(notice.tag.startsWith('turn-') && this.hasOpenSocket(deviceId)),
+        )
+        .map(([deviceId, notice]) => this.push(deviceId, notice)),
+    )
+    if (
+      !hasHumans(after) &&
+      (after.phase === 'Lobby' || after.phase === 'RematchLobby')
+    ) {
       await this.deleteGame('Everyone left the lobby.')
     } else {
       await this.scheduleAlarm(after)
@@ -365,7 +464,11 @@ export class GameDO extends DurableObject<Env> {
         await writeTombstone(this.env, room.code, { reason, deletedAt: now })
         await Promise.all(
           seatedDeviceIds(room).map(deviceId =>
-            this.env.PLAYERS.getByName(deviceId).markGone(room.code, reason, now),
+            this.env.PLAYERS.getByName(deviceId).markGone(
+              room.code,
+              reason,
+              now,
+            ),
           ),
         )
         const gone = ServerMessage.Snapshot({

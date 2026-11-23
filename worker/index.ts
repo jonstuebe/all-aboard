@@ -7,6 +7,7 @@ import {
   DEVICE_SECRET_HEADER,
   GameSnapshot,
   LocalResultsRequest,
+  PushSubscriptionRequest,
   decodeGameSnapshot,
   encodeGameSnapshot,
   encodeSeatResult,
@@ -35,7 +36,8 @@ const CODE_ATTEMPTS = 12
 const json = (body: unknown, status = 200): Response =>
   Response.json(body, { status, headers: { 'cache-control': 'no-store' } })
 
-const fail = (status: number, reason: string): Response => json({ reason }, status)
+const fail = (status: number, reason: string): Response =>
+  json({ reason }, status)
 
 const randomCode = (): string => {
   const bytes = new Uint8Array(CODE_LENGTH)
@@ -48,12 +50,17 @@ const randomCode = (): string => {
 
 type Credentials = Readonly<{ deviceId: string; secret: string }>
 
-const credentialsFrom = (request: Request, url: URL): Option.Option<Credentials> => {
+const credentialsFrom = (
+  request: Request,
+  url: URL,
+): Option.Option<Credentials> => {
   const deviceId =
     request.headers.get(DEVICE_ID_HEADER) ?? url.searchParams.get('device')
   const secret =
     request.headers.get(DEVICE_SECRET_HEADER) ?? url.searchParams.get('secret')
-  return deviceId !== null && secret !== null && DEVICE_ID_PATTERN.test(deviceId)
+  return deviceId !== null &&
+    secret !== null &&
+    DEVICE_ID_PATTERN.test(deviceId)
     ? Option.some({ deviceId, secret })
     : Option.none()
 }
@@ -119,7 +126,10 @@ const gameSnapshot = async (env: Env, code: string, deviceId: string) => {
         })
       : snapshot
   return new Response(encodeGameSnapshot(answer), {
-    headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
+    headers: {
+      'content-type': 'application/json',
+      'cache-control': 'no-store',
+    },
   })
 }
 
@@ -152,7 +162,10 @@ const connectToGame = async (
 
 const jsonText = (text: string): Response =>
   new Response(text, {
-    headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
+    headers: {
+      'content-type': 'application/json',
+      'cache-control': 'no-store',
+    },
   })
 
 const menu = async (env: Env, deviceId: string): Promise<Response> =>
@@ -179,10 +192,40 @@ const postLocalResults = async (
       player.recordResult(`${deviceId}:${id}`, encodeSeatResult(result)),
     ),
   )
-  return json({ accepted: results.map(({ id }) => id), recorded: recorded.filter(Boolean).length })
+  return json({
+    accepted: results.map(({ id }) => id),
+    recorded: recorded.filter(Boolean).length,
+  })
 }
 
-const GAME_PATH = /^\/api\/games\/([^/]+)(\/ws)?$/
+const subscribePush = async (
+  env: Env,
+  request: Request,
+  deviceId: string,
+): Promise<Response> => {
+  const maybeBody = await readJson(request, PushSubscriptionRequest)
+  if (Option.isNone(maybeBody)) {
+    return fail(400, 'Send a push subscription.')
+  }
+  const { endpoint, keys } = maybeBody.value
+  if (!endpoint.startsWith('https://')) {
+    return fail(400, 'Push endpoints must use https.')
+  }
+  const player = env.PLAYERS.getByName(deviceId)
+  if (request.method === 'DELETE') {
+    await player.removeSubscription(endpoint)
+  } else {
+    await player.addSubscription(endpoint, keys.p256dh, keys.auth)
+  }
+  return json({ ok: true })
+}
+
+const pingGame = async (env: Env, code: string, deviceId: string) => {
+  const maybeReason = await env.GAMES.getByName(code).pingFrom(deviceId)
+  return maybeReason === null ? json({ ok: true }) : fail(409, maybeReason)
+}
+
+const GAME_PATH = /^\/api\/games\/([^/]+)(\/ws|\/ping)?$/
 
 export const route = async (request: Request, env: Env): Promise<Response> => {
   const url = new URL(request.url)
@@ -192,11 +235,24 @@ export const route = async (request: Request, env: Env): Promise<Response> => {
       : env.ASSETS.fetch(request)
   }
 
+  if (url.pathname === '/api/push-key') {
+    return env.VAPID_PUBLIC_KEY === undefined
+      ? fail(503, 'Push isn’t set up on this server.')
+      : json({ publicKey: env.VAPID_PUBLIC_KEY })
+  }
+
   const maybeDeviceId = await authenticate(env, request, url)
   if (Option.isNone(maybeDeviceId)) {
     return fail(401, 'This device isn’t recognised.')
   }
   const deviceId = maybeDeviceId.value
+
+  if (
+    url.pathname === '/api/me/push' &&
+    (request.method === 'POST' || request.method === 'DELETE')
+  ) {
+    return subscribePush(env, request, deviceId)
+  }
 
   if (url.pathname === '/api/me' && request.method === 'GET') {
     return menu(env, deviceId)
@@ -215,6 +271,11 @@ export const route = async (request: Request, env: Env): Promise<Response> => {
     const code = normalizeCode(decodeURIComponent(gameMatch[1] ?? ''))
     if (!isValidCode(code)) {
       return fail(404, 'That invite code doesn’t look right.')
+    }
+    if (gameMatch[2] === '/ping') {
+      return request.method === 'POST'
+        ? pingGame(env, code, deviceId)
+        : fail(405, 'Use POST.')
     }
     return gameMatch[2] === '/ws'
       ? connectToGame(env, request, code, deviceId)
