@@ -395,7 +395,7 @@ const headerView = (model: Model, h: HtmlBuilder<Message>): Html =>
             ),
         },
       ),
-      ...tableActionsView(model, h),
+      h.div([h.Class('topbar-actions')], tableActionsView(model, h)),
     ],
   )
 
@@ -652,7 +652,7 @@ const ticketsView = (
           h.h2([h.Id('tickets-title')], ['Your tickets']),
           h.button(
             [
-              h.Class('btn btn-small'),
+              h.Class('btn btn-cream btn-compact'),
               h.Type('button'),
               h.Disabled(!canDrawTicket),
               h.OnClick(Message.ClickedDrawTicket()),
@@ -846,7 +846,7 @@ const passView = (model: Model, h: HtmlBuilder<Message>): Html =>
   !viewerHasAnyMove(model)
     ? h.button(
         [
-          h.Class('btn btn-primary'),
+          h.Class('btn btn-red'),
           h.Type('button'),
           h.OnClick(Message.ClickedPass()),
         ],

@@ -55,7 +55,7 @@ const pingButton = (
       const isReady = waitMinutes <= 0
       return h.button(
         [
-          h.Class('btn btn-small'),
+          h.Class('btn btn-cream btn-compact'),
           h.Type('button'),
           h.Disabled(!isReady),
           h.AriaLabel(

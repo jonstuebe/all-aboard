@@ -158,7 +158,7 @@ const question = (h: H, text: string, hint: string): ReadonlyArray<Html> => [
 const backButton = (h: H): Html =>
   h.button(
     [
-      h.Class('ticket-btn is-quiet wizard-back'),
+      h.Class('btn btn-cream btn-compact'),
       h.Type('button'),
       h.OnClick(Message.ClickedWizardBack()),
     ],
@@ -173,7 +173,7 @@ const playingAs = (inputs: HomeInputs, h: H): Html =>
       h.span([h.AriaHidden(true)], ['·']),
       h.button(
         [
-          h.Class('wizard-change'),
+          h.Class('btn btn-text btn-compact'),
           h.Type('button'),
           h.AriaLabel('Change your name'),
           h.OnClick(Message.ClickedChangeName()),
@@ -214,7 +214,7 @@ const nameStep = (home: Home, inputs: HomeInputs, h: H): Html =>
         nameField(inputs, h),
         h.button(
           [
-            h.Class('ticket-btn is-red'),
+            h.Class('btn btn-red btn-block'),
             h.Type('submit'),
             h.Disabled(inputs.playerName.trim() === ''),
           ],
@@ -234,14 +234,14 @@ const choice = (
 ): Html =>
   h.button(
     [
-      h.Class(`ticket-btn ${colour} wizard-choice`),
+      h.Class(`btn ${colour} btn-block btn-with-detail`),
       h.Type('button'),
       h.Disabled(disabled),
       h.OnClick(message),
     ],
     [
-      h.span([h.Class('wizard-choice-title')], [title]),
-      h.span([h.Class('wizard-choice-detail')], [detail]),
+      h.span([h.Class('btn-title')], [title]),
+      h.span([h.Class('btn-detail')], [detail]),
     ],
   )
 
@@ -254,7 +254,7 @@ const modeStep = (home: Home, inputs: HomeInputs, h: H): Html =>
       [
         choice(
           h,
-          'is-red',
+          'btn-red',
           isCreating(home) ? 'Opening a lobby…' : 'Play with friends',
           'Open a lobby and share the code',
           Message.ClickedNewFriendGame(),
@@ -262,14 +262,14 @@ const modeStep = (home: Home, inputs: HomeInputs, h: H): Html =>
         ),
         choice(
           h,
-          'is-green',
+          'btn-green',
           'Play with bots',
           'On this device, offline too',
           Message.ClickedPlayWithBots(),
         ),
         h.button(
           [
-            h.Class('ticket-btn is-quiet'),
+            h.Class('btn btn-cream btn-block'),
             h.Type('button'),
             h.OnClick(Message.ClickedHaveInviteCode()),
           ],
@@ -287,7 +287,7 @@ const botsStep = (home: Home, inputs: HomeInputs, h: H): Html =>
     seatCountPicker(inputs, h),
     h.button(
       [
-        h.Class('ticket-btn is-green'),
+        h.Class('btn btn-green btn-block'),
         h.Type('button'),
         h.OnClick(Message.ClickedNewBotGame()),
       ],
@@ -314,7 +314,7 @@ const joinStep = (home: Home, inputs: HomeInputs, h: H): Html =>
             h.OnInput(value => Message.UpdatedJoinCode({ value })),
           ]),
         ),
-        h.button([h.Class('ticket-btn is-blue'), h.Type('submit')], ['Join']),
+        h.button([h.Class('btn btn-blue'), h.Type('submit')], ['Join']),
       ],
     ),
     createError(home, h),

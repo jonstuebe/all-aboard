@@ -152,7 +152,7 @@ export const notificationsView = (
       Off: () => [
         h.button(
           [
-            h.Class('btn btn-small'),
+            h.Class('btn btn-cream'),
             h.Type('button'),
             h.OnClick(Message.ClickedEnableNotifications()),
           ],
@@ -174,7 +174,7 @@ export const notificationsView = (
       Failed: ({ reason }) => [
         h.button(
           [
-            h.Class('btn btn-small'),
+            h.Class('btn btn-cream'),
             h.Type('button'),
             h.OnClick(Message.ClickedEnableNotifications()),
           ],
