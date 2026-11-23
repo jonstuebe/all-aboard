@@ -28,7 +28,11 @@ export type PingStatus = typeof PingStatus.Type
 
 export const TableMode = defineTaggedUnion({
   Local: {},
-  Online: { code: Schema.String, ping: PingStatus },
+  Online: {
+    code: Schema.String,
+    ping: PingStatus,
+    isConfirmingLeave: Schema.Boolean,
+  },
 })
 export type TableMode = typeof TableMode.Type
 

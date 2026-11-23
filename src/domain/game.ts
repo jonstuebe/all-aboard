@@ -785,3 +785,16 @@ export const handSeatToBot = (model: Model, seatIndex: number): Model =>
             `${player.name} left the game. A bot took the seat.`,
           ),
   })
+
+// NOTE: A player who leaves an online game hands their seat to a bot. The
+// bot keeps the name, hand, tickets, trains and score; only who decides the
+// moves changes. The log notes it so everyone sees why the seat changed.
+export const handOffToBot = (model: Model, seatIndex: number): Model =>
+  modifyFields(model, {
+    players: players =>
+      Array.map(players, (player, index) =>
+        index === seatIndex
+          ? modifyFields(player, { kind: () => 'Bot' as const })
+          : player,
+      ),
+  })

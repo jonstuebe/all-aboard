@@ -105,3 +105,20 @@ Status: design agreed with the owner, 2026-11-23. Not started.
 - Read `AGENTS.md` and `FOLDKIT.md` first. Never call `Math.random` in `update`.
 - Another agent is editing `src/view.ts` and `src/styles.css` on `main`. Coordinate before touching them, especially for the animation.
 - The dev server runs on port 5188 and is exposed to `*.ts.net` for Tailscale previews.
+
+## Build notes (steps 1–6)
+
+Choices made where this plan was silent. Each is the simplest option consistent with it.
+
+- **Identity**: a random device ID and secret, made on first launch and kept in localStorage. The device's `PlayerDO` stores a hash of the secret the first time it sees it (trust on first use). There is no sign-in, so clearing site data starts a new identity.
+- **Invite codes**: `TRAIN-XXX` style. The code is the `GameDO` name and the `/g/<code>` URL.
+- **Storage**: `GameDO` keeps the room as one JSON row plus an action log in its SQLite storage. `PlayerDO` keeps the menu, stats, recorded results and push subscriptions. Tombstones go in KV (`TOMBSTONES`).
+- **Live updates**: hibernatable WebSockets. Every change sends each socket its own snapshot (lobby, table `ClientView`, closed or gone). There is no delta protocol.
+- **Alarms**: one alarm per game, set to the earliest of the next bot move (`BOT_DELAY_MS`, 1.5 s locally), the 48-hour warning, 72-hour deletion and one-week cleanup.
+- **Stats**: recorded once per finished game, keyed by code and round, for people still in it. A player who left gets no result. Bot-only results post when the menu next loads.
+- **Push**: sent from the Worker with WebCrypto only (VAPID JWT and aes128gcm), with no Node libraries. "Your turn" is skipped while that device has the game open on a socket. Expired subscriptions (404/410) are dropped. `npm run dev:vars` writes local VAPID keys to the gitignored `.dev.vars`.
+- **Pings**: also available from the menu's "Waiting on others" rows, over HTTP (`POST /api/games/<code>/ping`). The same once-an-hour limit applies.
+- **Service worker**: network-first for everything except `/api`, so an online visit always gets the latest build and the cache only serves offline launches (bot games). The notification permission is asked only from a tap on "Turn on notifications". On iOS outside a home-screen install, the card explains Add to Home Screen instead.
+- **Leave game**: asks for a second tap ("A bot will take your seat"). The seat keeps its device so the leaver's menu shows "Left". If the last person leaves a game in progress, it is deleted with the reason "Everyone left this game." There is no final-score push and no stats.
+- **Rematch**: any person still in the finished game can open it. Their seat starts ready, bots are always ready, and the host's seat always counts. Seats whose player left stay as bots under the same name. Players who aren't ready when the host starts are left out of the new game. The host role passes to the first remaining person if the host left.
+- **Not built here**: step 7 (celebration) and step 8 (balance), as agreed.

@@ -45,6 +45,8 @@ export const Message = defineMessageUnion({
   ClickedMenu: {},
   ClickedPing: {},
   ClickedLeaveGame: {},
+  ConfirmedLeaveGame: {},
+  CancelledLeaveGame: {},
   ClickedRematch: {},
   HoveredRoute: { routeId: Schema.String },
   UnhoveredRoute: {},

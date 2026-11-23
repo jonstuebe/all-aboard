@@ -32,10 +32,14 @@ export const OnlineGame = Schema.Struct({
   joinName: Schema.String,
   joinTone: Schema.Number,
   isPinging: Schema.Boolean,
+  isConfirmingLeave: Schema.Boolean,
 })
 export type OnlineGame = typeof OnlineGame.Type
 
-export const openOnlineGame = (code: string, playerName: string): OnlineGame => ({
+export const openOnlineGame = (
+  code: string,
+  playerName: string,
+): OnlineGame => ({
   code,
   connection: Connection.Connecting(),
   attempt: 0,
@@ -44,6 +48,7 @@ export const openOnlineGame = (code: string, playerName: string): OnlineGame => 
   joinName: playerName,
   joinTone: 0,
   isPinging: false,
+  isConfirmingLeave: false,
 })
 
 export const withNotice = (
@@ -71,7 +76,11 @@ const CONNECT_TIMEOUT = Duration.seconds(8)
 const RECONNECT_DELAY = Duration.seconds(2)
 
 export const SocketRequirements = Schema.Option(
-  Schema.Struct({ code: Schema.String, attempt: Schema.Number, device: Device }),
+  Schema.Struct({
+    code: Schema.String,
+    attempt: Schema.Number,
+    device: Device,
+  }),
 )
 
 export const acquireGameSocket = ({
@@ -122,7 +131,10 @@ const streamSocketMessages = (socket: WebSocket) =>
           Option.match(decodeServerMessage(String(event.data)), {
             onNone: () => undefined,
             onSome: message => {
-              Queue.offerUnsafe(queue, Message.ReceivedServerMessage({ message }))
+              Queue.offerUnsafe(
+                queue,
+                Message.ReceivedServerMessage({ message }),
+              )
             },
           })
         }
@@ -149,7 +161,9 @@ export const gameSocketStream = (isOpen: boolean) =>
     Stream.unwrap(
       GameSocket.get.pipe(
         Effect.map(streamSocketMessages),
-        Effect.catchTag('ResourceNotAvailable', () => Effect.succeed(Stream.empty)),
+        Effect.catchTag('ResourceNotAvailable', () =>
+          Effect.succeed(Stream.empty),
+        ),
       ),
     ),
     Effect.sync(() => isOpen),
@@ -159,7 +173,10 @@ export const gameSocketStream = (isOpen: boolean) =>
 
 export const SendClientMessage = Command.define('SendClientMessage', {
   args: { message: ClientMessageSchema },
-  messages: [Message.CompletedSendClientMessage, Message.FailedSendClientMessage],
+  messages: [
+    Message.CompletedSendClientMessage,
+    Message.FailedSendClientMessage,
+  ],
   execute: ({ message }) =>
     GameSocket.get.pipe(
       Effect.flatMap(socket =>

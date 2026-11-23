@@ -4,7 +4,13 @@ import { modifyFields } from 'foldkit/struct'
 
 import { playBotStep } from '../src/domain/bot'
 import { projectView } from '../src/domain/clientView'
-import { BOT_NAMES, actAs, isBotTurn, newGame } from '../src/domain/game'
+import {
+  BOT_NAMES,
+  actAs,
+  handOffToBot,
+  isBotTurn,
+  newGame,
+} from '../src/domain/game'
 import { seatResult, type SeatResult } from '../src/domain/results'
 import {
   MAX_SEATS,
@@ -353,7 +359,10 @@ const startGame = (room: Room, deviceId: string, seed: number): RoomResult => {
   }
   const seats =
     room.phase === 'RematchLobby'
-      ? Array.filter(room.seats, seat => seat.isReady)
+      ? Array.filter(
+          room.seats,
+          seat => seat.isReady || Option.contains(seat.maybeDeviceId, room.hostDeviceId),
+        )
       : room.seats
   if (seats.length < MIN_SEATS) {
     return reject(`You need at least ${MIN_SEATS} ready seats to start.`)
@@ -471,6 +480,111 @@ const ping = (room: Room, deviceId: string, now: number): RoomResult =>
           ),
   })
 
+// LEAVE AND REMATCH
+
+// NOTE: Leaving a game in progress hands the seat to a bot (see
+// handOffToBot). The seat keeps its device so the menu can say "Left", but
+// hasLeft shuts that device out of moves, pings and pushes.
+const leaveGame = (room: Room, deviceId: string): RoomResult => {
+  if (room.phase === 'Finished') {
+    return reject('This game is over. Head back to the menu instead.')
+  }
+  return Option.match(activeSeatIndexOf(room, deviceId), {
+    onNone: () => reject('You don’t have a seat in this game.'),
+    onSome: seatIndex =>
+      Option.match(room.maybeGame, {
+        onNone: () => reject('The game is not in progress.'),
+        onSome: game =>
+          accept(
+            passHostIfLeft(
+              modifyFields(
+                modifySeat(room, seatIndex, seat =>
+                  modifyFields(seat, {
+                    kind: () => 'Bot' as const,
+                    hasLeft: () => true,
+                  }),
+                ),
+                {
+                  maybeGame: () => Option.some(handOffToBot(game, seatIndex)),
+                  pings: pings =>
+                    Array.filter(pings, record => record.deviceId !== deviceId),
+                },
+              ),
+            ),
+          ),
+      }),
+  })
+}
+
+// NOTE: The host role follows the first person still at the table.
+const passHostIfLeft = (room: Room): Room =>
+  Array.contains(humanDeviceIds(room), room.hostDeviceId)
+    ? room
+    : Option.match(Array.head(humanDeviceIds(room)), {
+        onNone: () => room,
+        onSome: deviceId =>
+          modifyFields(room, { hostDeviceId: () => deviceId }),
+      })
+
+// NOTE: Rematch turns the finished game back into a lobby with the same
+// seats. Seats whose player left stay as bots (and drop the old device), the
+// person who opened it is ready, everyone else taps Ready.
+const openRematch = (room: Room, deviceId: string): RoomResult => {
+  if (room.phase === 'RematchLobby') {
+    return Option.isSome(activeSeatIndexOf(room, deviceId))
+      ? accept(room)
+      : reject('You weren’t in this game.')
+  }
+  if (room.phase !== 'Finished') {
+    return reject('A rematch opens once the game is over.')
+  }
+  return Option.isNone(activeSeatIndexOf(room, deviceId))
+    ? reject('Only players still in the game can start a rematch.')
+    : accept(
+        passHostIfLeft(
+          modifyFields(room, {
+            phase: () => 'RematchLobby' as const,
+            seats: seats =>
+              Array.map(seats, seat =>
+                seat.hasLeft
+                  ? modifyFields(seat, {
+                      kind: () => 'Bot' as const,
+                      hasLeft: () => false,
+                      maybeDeviceId: () => Option.none(),
+                      isReady: () => true,
+                    })
+                  : modifyFields(seat, {
+                      isReady: () =>
+                        seat.kind === 'Bot' ||
+                        Option.contains(seat.maybeDeviceId, deviceId),
+                    }),
+              ),
+            maybeWarnedAt: () => Option.none(),
+            pings: () => [],
+          }),
+        ),
+      )
+}
+
+const markReady = (
+  room: Room,
+  deviceId: string,
+  isReady: boolean,
+): RoomResult => {
+  if (room.phase !== 'RematchLobby') {
+    return reject('There is no rematch to get ready for.')
+  }
+  return Option.match(seatIndexOf(room, deviceId), {
+    onNone: () => reject('You weren’t in this game.'),
+    onSome: seatIndex =>
+      accept(
+        modifySeat(room, seatIndex, seat =>
+          modifyFields(seat, { isReady: () => isReady }),
+        ),
+      ),
+  })
+}
+
 export type MessageContext = Readonly<{ now: number; seed: number }>
 
 export const applyClientMessage = (
@@ -491,9 +605,9 @@ export const applyClientMessage = (
       LeaveGame: () =>
         isLobbyPhase(room)
           ? leaveLobby(room, deviceId)
-          : reject('Leaving a game in progress isn’t available yet.'),
-      MarkReady: () => reject('There is no rematch to get ready for.'),
-      OpenRematch: () => reject('Rematches aren’t available yet.'),
+          : leaveGame(room, deviceId),
+      MarkReady: ({ isReady }) => markReady(room, deviceId, isReady),
+      OpenRematch: () => openRematch(room, deviceId),
     }),
     Result.map(next =>
       message._tag === 'TakeAction' || message._tag === 'Ping'
@@ -663,6 +777,7 @@ export const FINISHED_TTL_MS = 7 * 24 * HOUR_MS
 export const REASON_IDLE_GAME = 'Removed after 3 days with no moves.'
 export const REASON_IDLE_LOBBY = 'Removed after 3 days without starting.'
 export const REASON_FINISHED = 'Removed one week after it ended.'
+export const REASON_EVERYONE_LEFT = 'Everyone left this game.'
 
 const isBotToMove = (room: Room): boolean =>
   room.phase === 'Playing' && Option.exists(room.maybeGame, isBotTurn)

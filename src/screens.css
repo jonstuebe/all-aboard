@@ -435,3 +435,9 @@
   font-size: 0.875rem;
   text-align: center;
 }
+
+.leave-confirm {
+  align-self: center;
+  color: var(--cream-muted);
+  font-size: 0.875rem;
+}

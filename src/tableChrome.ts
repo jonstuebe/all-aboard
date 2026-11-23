@@ -43,13 +43,20 @@ export const tableActionsView = (
       quietButton('Menu', Message.ClickedMenu(), h),
       quietButton('New game', Message.ClickedNewGame(), h),
     ],
-    Online: ({ ping }) => [
-      pingButton(ping, h),
-      table.phase._tag === 'Playing'
-        ? quietButton('Leave game', Message.ClickedLeaveGame(), h)
-        : h.empty,
-      quietButton('Menu', Message.ClickedMenu(), h),
-    ],
+    Online: ({ ping, isConfirmingLeave }) =>
+      table.phase._tag === 'Playing' && isConfirmingLeave
+        ? [
+            h.span([h.Class('leave-confirm')], ['A bot will take your seat.']),
+            quietButton('Leave', Message.ConfirmedLeaveGame(), h),
+            quietButton('Stay', Message.CancelledLeaveGame(), h),
+          ]
+        : [
+            pingButton(ping, h),
+            table.phase._tag === 'Playing'
+              ? quietButton('Leave game', Message.ClickedLeaveGame(), h)
+              : h.empty,
+            quietButton('Menu', Message.ClickedMenu(), h),
+          ],
   })
 
 export const resultsActionView = (

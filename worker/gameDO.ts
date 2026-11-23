@@ -30,6 +30,7 @@ import {
   pingTarget,
   pushesForChange,
   warningNotice,
+  REASON_EVERYONE_LEFT,
   resultKey,
   runAlarm,
   seatedDeviceIds,
@@ -442,11 +443,12 @@ export class GameDO extends DurableObject<Env> {
         )
         .map(([deviceId, notice]) => this.push(deviceId, notice)),
     )
-    if (
-      !hasHumans(after) &&
-      (after.phase === 'Lobby' || after.phase === 'RematchLobby')
-    ) {
-      await this.deleteGame('Everyone left the lobby.')
+    // NOTE: With no people left, a lobby closes and a game in progress ends
+    // quietly: deleted with no final-score push and no stats.
+    if (!hasHumans(after) && after.phase !== 'Finished') {
+      await this.deleteGame(
+        after.phase === 'Playing' ? REASON_EVERYONE_LEFT : 'Everyone left the lobby.',
+      )
     } else {
       await this.scheduleAlarm(after)
     }

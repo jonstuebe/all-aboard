@@ -612,9 +612,33 @@ export const update = (model: Model, message: Message) =>
       ),
 
     ClickedLeaveGame: () =>
-      onOnline(model, game =>
-        sendFromOnline(model, game, ClientMessage.LeaveGame()),
-      ),
+      onOnline(model, game => ({
+        model: withOnlineGame(
+          model,
+          modifyFields(game, { isConfirmingLeave: () => true }),
+        ),
+      })),
+
+    CancelledLeaveGame: () =>
+      onOnline(model, game => ({
+        model: withOnlineGame(
+          model,
+          modifyFields(game, { isConfirmingLeave: () => false }),
+        ),
+      })),
+
+    ConfirmedLeaveGame: () =>
+      onOnline(model, game => {
+        const sent = sendFromOnline(model, game, ClientMessage.LeaveGame())
+        return {
+          model: goHome(sent.model),
+          commands: [
+            ...(sent.commands ?? []),
+            Navigate({ url: '/' }),
+            fetchMenu(model),
+          ],
+        }
+      }),
 
     ClickedRematch: () =>
       onOnline(model, game =>
@@ -925,6 +949,7 @@ const onlineView = (
               TableMode.Online({
                 code: table.code,
                 ping: pingStatus(table, game.isPinging, now),
+                isConfirmingLeave: game.isConfirmingLeave,
               }),
             ),
             h,
