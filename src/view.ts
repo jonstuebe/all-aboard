@@ -39,6 +39,11 @@ import {
   viewerHasAnyMove,
 } from './domain/clientView'
 import { AnimateHandRow, HAND_CARD_DATA } from './handMotion'
+import {
+  AnimateMarketRow,
+  DECK_COUNT_DATA,
+  MARKET_FACE_DATA,
+} from './marketMotion'
 import { Message } from './message'
 import { Phase, type Standing, type TurnStep } from './model'
 import { DOCK_TAB_DATA, DragDockTab } from './segmentDrag'
@@ -527,12 +532,19 @@ const marketView = (model: Model, h: HtmlBuilder<Message>): Html => {
   const slots = Array.map(Array.range(0, MARKET_SIZE - 1), slot =>
     Option.match(marketCardAt(model, slot), {
       onNone: () =>
-        h.keyed('li')(`slot-${slot}`, [h.Class('card is-empty')], ['Sold out']),
+        h.keyed('li')(
+          `slot-${slot}`,
+          [
+            h.Class('card is-empty'),
+            h.DataAttribute(MARKET_FACE_DATA, 'empty'),
+          ],
+          ['Sold out'],
+        ),
       onSome: card => {
         const isAvailable = canAct && canTakeMarketCard(model, slot, step)
         return h.keyed('li')(
           `slot-${slot}`,
-          [],
+          [h.DataAttribute(MARKET_FACE_DATA, card)],
           [
             h.button(
               [
@@ -577,12 +589,12 @@ const marketView = (model: Model, h: HtmlBuilder<Message>): Html => {
       drawProgressView(canAct, step, h),
       h.p([h.Class('market-label')], ['Face up · you choose']),
       h.ul(
-        [h.Class('card-row')],
+        [h.Class('card-row'), h.OnMount(AnimateMarketRow)],
         [
           ...slots,
           h.keyed('li')(
             'deck',
-            [],
+            [h.DataAttribute(DECK_COUNT_DATA, String(model.deckCount))],
             [
               h.button(
                 [

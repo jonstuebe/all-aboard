@@ -1623,6 +1623,28 @@ button {
   pointer-events: none;
 }
 
+/* A face-up card or deck card in flight (marketMotion.ts). It sits in a
+   bare copy of the market panel so the panel's card rules still apply. */
+.panel.market.card-flight {
+  position: fixed;
+  z-index: 5;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  pointer-events: none;
+}
+
+.panel.market.card-flight > .card,
+.panel.market.card-flight > .card-back {
+  position: static;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  border-radius: 6px;
+}
+
 /* On wide screens the draw and hand panels put their heading beside
    the cards, so each row stays one short strip hugging the map. */
 @media (min-width: 960px) {
