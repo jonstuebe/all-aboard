@@ -10,8 +10,15 @@ export default defineConfig({
   },
   server: {
     host: true,
-    port: 5188,
+    port: Number(process.env.PORT ?? 5188),
     strictPort: true,
     allowedHosts: ['.ts.net'],
+    // NOTE: The game server is the local Worker (`npm run dev:worker`).
+    proxy: {
+      '/api': {
+        target: `http://127.0.0.1:${process.env.WORKER_PORT ?? 8790}`,
+        ws: true,
+      },
+    },
   },
 })
