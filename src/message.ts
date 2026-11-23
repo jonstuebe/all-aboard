@@ -6,6 +6,7 @@ import { Url } from 'foldkit/url'
 import { TurnStep } from './model'
 import { NotificationStatus } from './notificationStatus'
 import { Menu, ServerMessage } from './protocol'
+import { SoundSetting } from './soundSetting'
 import { DockTab } from './table'
 
 export const Message = defineMessageUnion({
@@ -25,6 +26,7 @@ export const Message = defineMessageUnion({
   FailedCreateGame: { reason: Schema.String },
   UpdatedJoinCode: { value: Schema.String },
   SubmittedJoinCode: {},
+  ClickedWatchCode: {},
   SubmittedName: {},
   ClickedPlayWithBots: {},
   ClickedHaveInviteCode: {},
@@ -87,6 +89,22 @@ export const Message = defineMessageUnion({
   CompletedShareInvite: {},
   ClickedCopyCode: {},
   CompletedCopyCode: { didCopy: Schema.Boolean },
+
+  // TABLE SCREEN
+  CompletedWaitForRecap: { run: Schema.Number, position: Schema.Number },
+  ClickedRecapPlayer: { playerIndex: Schema.Number },
+  ClickedRecapScores: {},
+  ClickedReplayRecap: {},
+  ClickedFullscreen: {},
+  CompletedRequestFullscreen: {},
+  AcquiredWakeLock: {},
+  ReleasedWakeLock: {},
+  FailedWakeLock: {},
+  ClickedSound: { setting: SoundSetting },
+  CompletedPlaySounds: {},
+  AcquiredAudio: {},
+  ReleasedAudio: {},
+  FailedAudio: {},
 
   // SOCKET
   ConnectedGameSocket: {},

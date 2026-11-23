@@ -60,13 +60,13 @@ type Model = Table
 
 // CONSTANTS
 
-const BOARD_VIEW_BOX = '40 30 920 566'
+export const BOARD_VIEW_BOX = '40 30 920 566'
 const TICKET_RING_RADIUS = 25
 const ROUTE_INSET = 24
 const SLOT_GAP = 6
 const LOG_LENGTH = 6
 
-const GLYPHS: Record<RouteColor | 'Wild', string> = {
+export const GLYPHS: Record<RouteColor | 'Wild', string> = {
   Red: '◆',
   Blue: '●',
   Green: '▲',
@@ -84,7 +84,7 @@ type LabelPlacement = Readonly<{
   anchor: 'start' | 'middle' | 'end'
 }>
 
-const LABEL_PLACEMENTS: Record<string, LabelPlacement> = {
+export const LABEL_PLACEMENTS: Record<string, LabelPlacement> = {
   seattle: { dx: 4, dy: -31, anchor: 'middle' },
   helena: { dx: 0, dy: -31, anchor: 'middle' },
   chicago: { dx: 0, dy: -31, anchor: 'middle' },
@@ -96,25 +96,29 @@ const LABEL_PLACEMENTS: Record<string, LabelPlacement> = {
   miami: { dx: 27, dy: 9, anchor: 'start' },
 }
 
-const DEFAULT_PLACEMENT: LabelPlacement = { dx: 0, dy: 48, anchor: 'middle' }
+export const DEFAULT_PLACEMENT: LabelPlacement = {
+  dx: 0,
+  dy: 48,
+  anchor: 'middle',
+}
 
-const colorName = (card: Card | RouteColor): string =>
+export const colorName = (card: Card | RouteColor): string =>
   card === 'Wild' ? 'Wild' : card === 'Gray' ? 'Any color' : card
 
-const playerTone = (player: Player | undefined): string =>
+export const playerTone = (player: Player | undefined): string =>
   `tone-p${player?.tone ?? 0}`
 
 const seatTone = (model: Model, playerIndex: number): string =>
   playerTone(model.players[playerIndex])
 
-const initialOf = (player: Player): string => player.name.slice(0, 1)
+export const initialOf = (player: Player): string => player.name.slice(0, 1)
 
-const cityPair = (from: string, to: string): string =>
+export const cityPair = (from: string, to: string): string =>
   `${cityById(from).name} – ${cityById(to).name}`
 
 // BOARD
 
-const routeGeometry = (route: Route) => {
+export const routeGeometry = (route: Route) => {
   const from = cityById(route.from)
   const to = cityById(route.to)
   const deltaX = to.x - from.x
@@ -477,7 +481,10 @@ const carArt = (card: Card, h: HtmlBuilder<Message>): Html =>
     h.InnerHTML(CAR_ART[card]),
   ])
 
-const cardFace = (card: Card, h: HtmlBuilder<Message>): ReadonlyArray<Html> => [
+export const cardFace = (
+  card: Card,
+  h: HtmlBuilder<Message>,
+): ReadonlyArray<Html> => [
   h.span([h.Class('card-glyph'), h.AriaHidden(true)], [GLYPHS[card]]),
   carArt(card, h),
   h.span(
