@@ -47,6 +47,7 @@ import {
   leaveDialogView,
   resultsActionView,
   tableActionsView,
+  tableMenuView,
   tableTitle,
 } from './tableChrome'
 
@@ -402,6 +403,7 @@ const headerView = (model: Model, h: HtmlBuilder<Message>): Html =>
         },
       ),
       h.div([h.Class('topbar-actions')], tableActionsView(model, h)),
+      ...tableMenuView(model, h),
     ],
   )
 
