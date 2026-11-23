@@ -84,7 +84,17 @@ import {
   notificationsView,
 } from './push'
 import { AppRoute, gamePath, urlToAppRoute } from './route'
-import { CreateState, Home, emptyHome, homeView } from './screens/home'
+import {
+  CreateState,
+  Home,
+  changeName,
+  chooseBots,
+  chooseJoin,
+  continueFromName,
+  homeFor,
+  homeView,
+  stepBack,
+} from './screens/home'
 import { lobbyView, messageScreen } from './screens/lobby'
 import { menuView } from './screens/menu'
 import { TableMode, makeTable } from './table'
@@ -235,17 +245,22 @@ const withScreen = (model: Model, screen: Screen): Model =>
   modifyFields(model, { screen: () => screen })
 
 const goHome = (model: Model): Model =>
-  withScreen(model, Screen.Home({ home: emptyHome }))
+  withScreen(model, Screen.Home({ home: homeFor(model.playerName) }))
 
 const fetchMenu = (model: Model) => FetchMenu({ device: model.device })
+
+const updateHome = (model: Model, f: (home: Home) => Home): UpdateReturn =>
+  model.screen._tag === 'Home'
+    ? { model: withScreen(model, Screen.Home({ home: f(model.screen.home) })) }
+    : { model }
 
 const screenForRoute = (model: Model, route: AppRoute): Screen =>
   AppRoute.match<Screen>(route, {
     Home: () =>
       model.screen._tag === 'Local'
         ? model.screen
-        : Screen.Home({ home: emptyHome }),
-    NotFound: () => Screen.Home({ home: emptyHome }),
+        : Screen.Home({ home: homeFor(model.playerName) }),
+    NotFound: () => Screen.Home({ home: homeFor(model.playerName) }),
     Game: ({ code }) => {
       const normalized = normalizeCode(code)
       return model.screen._tag === 'Online' &&
@@ -459,6 +474,24 @@ export const update = (model: Model, message: Message) =>
     }),
 
     CompletedSavePlayerName: () => ({ model }),
+
+    SubmittedName: () => {
+      const name = model.playerName.trim()
+      return name === ''
+        ? { model }
+        : {
+            ...updateHome(model, home => continueFromName(home, name)),
+            commands: [SavePlayerName({ name })],
+          }
+    },
+
+    ClickedPlayWithBots: () => updateHome(model, chooseBots),
+
+    ClickedHaveInviteCode: () => updateHome(model, chooseJoin),
+
+    ClickedWizardBack: () => updateHome(model, stepBack),
+
+    ClickedChangeName: () => updateHome(model, changeName),
 
     ClickedSeatCount: ({ count }) => ({
       model: modifyFields(model, { seatCount: () => clampSeatCount(count) }),
@@ -821,7 +854,7 @@ export const init: Runtime.RoutingApplicationInit<Model, Message, Flags> = (
   const route = urlToAppRoute(url)
   const base: Model = {
     route,
-    screen: Screen.Home({ home: emptyHome }),
+    screen: Screen.Home({ home: homeFor(initialFlags.playerName) }),
     playerName: initialFlags.playerName,
     seatCount: DEFAULT_SEAT_COUNT,
     device: initialFlags.device,
