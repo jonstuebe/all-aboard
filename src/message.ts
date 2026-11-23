@@ -73,6 +73,8 @@ export const Message = defineMessageUnion({
   ClickedReady: { isReady: Schema.Boolean },
   ClickedShareInvite: {},
   CompletedShareInvite: {},
+  ClickedCopyCode: {},
+  CompletedCopyCode: { didCopy: Schema.Boolean },
 
   // SOCKET
   ConnectedGameSocket: {},

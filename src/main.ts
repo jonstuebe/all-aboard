@@ -237,6 +237,18 @@ export const ShareInvite = Command.define('ShareInvite', {
     ),
 })
 
+export const CopyInviteCode = Command.define('CopyInviteCode', {
+  args: { code: Schema.String },
+  messages: [Message.CompletedCopyCode],
+  execute: ({ code }) =>
+    Effect.tryPromise(() => navigator.clipboard.writeText(code)).pipe(
+      Effect.as(Message.CompletedCopyCode({ didCopy: true })),
+      Effect.catch(() =>
+        Effect.succeed(Message.CompletedCopyCode({ didCopy: false })),
+      ),
+    ),
+})
+
 // UPDATE
 
 type UpdateReturn = Update.Return<Model, Message, GameSocketService>
@@ -800,6 +812,20 @@ export const update = (model: Model, message: Message) =>
       })),
 
     CompletedShareInvite: () => ({ model }),
+
+    ClickedCopyCode: () =>
+      onOnline(model, game => ({
+        model,
+        commands: [CopyInviteCode({ code: game.code })],
+      })),
+
+    CompletedCopyCode: ({ didCopy }) =>
+      onOnline(model, game => ({
+        model: withOnlineGame(
+          model,
+          modifyFields(game, { isCodeCopied: () => didCopy }),
+        ),
+      })),
 
     // SOCKET
 
