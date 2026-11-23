@@ -253,7 +253,7 @@ const inviteBlock = (
         [
           h.output(
             [h.Class('invite-code'), h.AriaLabelledBy('invite-code-label')],
-            [lobby.code],
+            [h.span([h.Class('invite-code-text')], [lobby.code])],
           ),
           h.button(
             [

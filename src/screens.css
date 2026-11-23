@@ -181,7 +181,6 @@
   flex: 1;
   align-items: center;
   min-width: 0;
-  min-height: 56px;
   padding: 0 14px;
   border: 1.5px solid #8a6f4c;
   border-radius: 8px;
@@ -195,8 +194,12 @@
   white-space: nowrap;
   color: #3a2415;
   user-select: all;
-  /* NOTE: The code is all capitals, so trim the line box to the cap height;
-     otherwise the empty descender space makes it sit high in the box. */
+}
+
+/* NOTE: The code is all capitals, so trim its line box to the cap height;
+   otherwise the empty descender space makes it sit high in the box. The trim
+   goes on the inner span: on the flex container itself it does nothing. */
+.invite-code-text {
   text-box: trim-both cap alphabetic;
 }
 
@@ -210,6 +213,13 @@
   display: flex;
   align-items: stretch;
   gap: 10px;
+}
+
+/* The field stretches to the button plus its 4px ledge, so both read as the
+   same height. */
+.invite-code-row > .btn {
+  min-height: 52px;
+  margin-bottom: 4px;
 }
 
 .lobby-seats-heading {
