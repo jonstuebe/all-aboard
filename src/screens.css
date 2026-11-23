@@ -1,0 +1,29 @@
+/* NOTE: Styles for the multiplayer screens (menu, lobby, notices) and the
+   extra seat tones live here, apart from styles.css, so the table's design
+   can change without touching them. */
+
+:root {
+  --p3: #c0465f;
+  --p4: #5f7d2a;
+}
+
+.tone-p3 {
+  --tone: var(--p3);
+}
+.tone-p4 {
+  --tone: var(--p4);
+}
+
+.bot-badge {
+  display: inline-block;
+  margin-inline-start: 0.4em;
+  padding: 0 0.4em;
+  border-radius: 999px;
+  font-family: var(--font-engraved);
+  font-size: 0.7em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--brass-ink);
+  background: var(--brass-face);
+  vertical-align: 0.15em;
+}

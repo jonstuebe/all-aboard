@@ -1,23 +1,37 @@
 import { Duration, Effect, Match, Option, Random, Schema } from 'effect'
 import { Command, Dom, Runtime, Subscription, type Update } from 'foldkit'
+import type { Document, HtmlBuilder } from 'foldkit/html'
+import { defineTaggedUnion } from 'foldkit/schema'
 import { modifyFields } from 'foldkit/struct'
 
-import { decideBotAction } from './domain/bot'
+import { PlayerAction, isBotTurn, maybeTurnStep } from './domain/game'
 import {
-  PlayerAction,
-  applyAction,
-  emptyModel,
-  isBotTurn,
-  isHumanTurn,
-  maybeTurnStep,
-  newGame,
-} from './domain/game'
+  LocalTable,
+  actLocally,
+  dealLocalTable,
+  emptyLocalTable,
+  localTableView,
+  playLocalBot,
+} from './localTable'
 import { Message } from './message'
-import { Model, TurnStep } from './model'
+import { TurnStep } from './model'
+import { tableView } from './view'
 
 export { Message } from './message'
-export { Model } from './model'
-export { view } from './view'
+
+// MODEL
+
+export const Screen = defineTaggedUnion({
+  Local: { table: LocalTable },
+})
+export type Screen = typeof Screen.Type
+
+export const Model = Schema.Struct({
+  screen: Screen,
+})
+export type Model = typeof Model.Type
+
+const DEFAULT_SEAT_COUNT = 3
 
 // COMMAND
 
@@ -43,73 +57,117 @@ export const WaitForBot = Command.define('WaitForBot', {
 
 type UpdateReturn = Update.Return<Model, Message>
 
-const scheduleBot = (model: Model): UpdateReturn =>
-  Option.match(maybeTurnStep(model), {
-    onNone: () => ({ model }),
+const withLocalTable = (model: Model, table: LocalTable): Model =>
+  modifyFields(model, { screen: () => Screen.Local({ table }) })
+
+const scheduleLocalBot = (model: Model, table: LocalTable): UpdateReturn =>
+  Option.match(maybeTurnStep(table.game), {
+    onNone: () => ({ model: withLocalTable(model, table) }),
     onSome: step =>
-      isBotTurn(model)
+      isBotTurn(table.game)
         ? {
-            model,
+            model: withLocalTable(model, table),
             commands: [
               WaitForBot({
-                gameId: model.gameId,
-                turnNumber: model.turnNumber,
+                gameId: table.game.gameId,
+                turnNumber: table.game.turnNumber,
                 step,
               }),
             ],
           }
-        : { model },
+        : { model: withLocalTable(model, table) },
   })
 
-const takeHumanAction = (model: Model, action: PlayerAction): UpdateReturn =>
-  isHumanTurn(model) ? scheduleBot(applyAction(model, action)) : { model }
+const onLocalTable = (
+  model: Model,
+  onTable: (table: LocalTable) => UpdateReturn,
+): UpdateReturn =>
+  Screen.match<UpdateReturn>(model.screen, {
+    Local: ({ table }) => onTable(table),
+  })
+
+const takeTableAction = (model: Model, action: PlayerAction): UpdateReturn =>
+  onLocalTable(model, table =>
+    scheduleLocalBot(model, actLocally(table, action)),
+  )
+
+const modifyTableUi = (
+  model: Model,
+  modify: (table: LocalTable) => LocalTable,
+): UpdateReturn =>
+  onLocalTable(model, table => ({
+    model: withLocalTable(model, modify(table)),
+  }))
 
 const MARKET_KEYS = ['1', '2', '3', '4', '5']
 
 export const update = (model: Model, message: Message) =>
   Message.match<UpdateReturn>(message, {
-    CompletedRollSeed: ({ seed }) => scheduleBot(newGame(seed)),
+    CompletedRollSeed: ({ seed }) =>
+      onLocalTable(model, table =>
+        scheduleLocalBot(model, dealLocalTable(table, seed)),
+      ),
 
-    ClickedDeck: () => takeHumanAction(model, PlayerAction.DrewFromDeck()),
+    ClickedDeck: () => takeTableAction(model, PlayerAction.DrewFromDeck()),
 
     ClickedMarketCard: ({ slot }) =>
-      takeHumanAction(model, PlayerAction.TookMarketCard({ slot })),
+      takeTableAction(model, PlayerAction.TookMarketCard({ slot })),
 
     ClickedRoute: ({ routeId }) =>
-      takeHumanAction(model, PlayerAction.ClaimedRoute({ routeId })),
+      takeTableAction(model, PlayerAction.ClaimedRoute({ routeId })),
 
-    ClickedDrawTicket: () => takeHumanAction(model, PlayerAction.DrewTicket()),
+    ClickedDrawTicket: () => takeTableAction(model, PlayerAction.DrewTicket()),
 
-    ClickedPass: () => takeHumanAction(model, PlayerAction.Passed()),
+    ClickedPass: () => takeTableAction(model, PlayerAction.Passed()),
 
-    ClickedNewGame: () => ({
-      model: emptyModel(model.gameId),
-      commands: [RollSeed()],
-    }),
+    ClickedNewGame: () =>
+      onLocalTable(model, table => ({
+        model: withLocalTable(
+          model,
+          emptyLocalTable(table.seatCount, table.playerName),
+        ),
+        commands: [RollSeed()],
+      })),
 
-    HoveredRoute: ({ routeId }) => ({
-      model: modifyFields(model, {
-        maybeHoveredRouteId: () => Option.some(routeId),
-      }),
-    }),
+    ClickedMenu: () => ({ model }),
 
-    UnhoveredRoute: () => ({
-      model: modifyFields(model, { maybeHoveredRouteId: () => Option.none() }),
-    }),
+    ClickedPing: () => ({ model }),
+
+    ClickedLeaveGame: () => ({ model }),
+
+    ClickedRematch: () => ({ model }),
+
+    HoveredRoute: ({ routeId }) =>
+      modifyTableUi(model, table =>
+        modifyFields(table, {
+          ui: ui =>
+            modifyFields(ui, {
+              maybeHoveredRouteId: () => Option.some(routeId),
+            }),
+        }),
+      ),
+
+    UnhoveredRoute: () =>
+      modifyTableUi(model, table =>
+        modifyFields(table, {
+          ui: ui =>
+            modifyFields(ui, { maybeHoveredRouteId: () => Option.none() }),
+        }),
+      ),
 
     PressedKey: ({ key }) =>
       Match.value(key.toLowerCase()).pipe(
         Match.withReturnType<UpdateReturn>(),
         Match.when('d', () =>
-          takeHumanAction(model, PlayerAction.DrewFromDeck()),
+          takeTableAction(model, PlayerAction.DrewFromDeck()),
         ),
         Match.when('t', () =>
-          takeHumanAction(model, PlayerAction.DrewTicket()),
+          takeTableAction(model, PlayerAction.DrewTicket()),
         ),
         Match.when(
           (pressed: string) => MARKET_KEYS.includes(pressed),
           pressed =>
-            takeHumanAction(
+            takeTableAction(
               model,
               PlayerAction.TookMarketCard({ slot: Number(pressed) - 1 }),
             ),
@@ -117,22 +175,27 @@ export const update = (model: Model, message: Message) =>
         Match.orElse(() => ({ model })),
       ),
 
-    CompletedWaitForBot: ({ gameId, turnNumber, step }) => {
-      const isStillThatTurn =
-        gameId === model.gameId &&
-        turnNumber === model.turnNumber &&
-        Option.contains(maybeTurnStep(model), step) &&
-        isBotTurn(model)
-      return isStillThatTurn
-        ? scheduleBot(applyAction(model, decideBotAction(model)))
-        : { model }
-    },
+    CompletedWaitForBot: ({ gameId, turnNumber, step }) =>
+      onLocalTable(model, table => {
+        const isStillThatTurn =
+          gameId === table.game.gameId &&
+          turnNumber === table.game.turnNumber &&
+          Option.contains(maybeTurnStep(table.game), step) &&
+          isBotTurn(table.game)
+        return isStillThatTurn
+          ? scheduleLocalBot(model, playLocalBot(table))
+          : { model }
+      }),
   })
 
 // INIT
 
 export const init: Runtime.ApplicationInit<Model, Message> = () => ({
-  model: emptyModel(0),
+  model: {
+    screen: Screen.Local({
+      table: emptyLocalTable(DEFAULT_SEAT_COUNT, 'You'),
+    }),
+  },
   commands: [RollSeed()],
 })
 
@@ -155,3 +218,10 @@ export const subscriptions = Subscription.make<Model, Message>()(_entry => ({
     }),
   ),
 }))
+
+// VIEW
+
+export const view = (model: Model, h: HtmlBuilder<Message>): Document =>
+  Screen.match<Document>(model.screen, {
+    Local: ({ table }) => tableView(localTableView(table), h),
+  })

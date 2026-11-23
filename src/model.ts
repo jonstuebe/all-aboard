@@ -3,12 +3,24 @@ import { defineTaggedUnion } from 'foldkit/schema'
 
 import { Card } from './domain/board'
 
-export const PlayerKind = Schema.Literals(['Human', 'Bot'])
+export const PlayerKind = Schema.Literals(['Human', 'Bot', 'LeftToBot'])
 export type PlayerKind = typeof PlayerKind.Type
+
+export const MIN_SEATS = 2
+export const MAX_SEATS = 5
+export const TONE_COUNT = 5
+
+export const SeatConfig = Schema.Struct({
+  name: Schema.String,
+  kind: Schema.Literals(['Human', 'Bot']),
+  tone: Schema.Number,
+})
+export type SeatConfig = typeof SeatConfig.Type
 
 export const Player = Schema.Struct({
   name: Schema.String,
   kind: PlayerKind,
+  tone: Schema.Number,
   hand: Schema.Array(Card),
   trains: Schema.Number,
   routePoints: Schema.Number,
@@ -46,6 +58,7 @@ export const LogEntry = Schema.Struct({
   id: Schema.Number,
   playerIndex: Schema.Number,
   text: Schema.String,
+  maybeSelfText: Schema.Option(Schema.String),
 })
 export type LogEntry = typeof LogEntry.Type
 
@@ -64,7 +77,5 @@ export const Model = Schema.Struct({
   turnNumber: Schema.Number,
   log: Schema.Array(LogEntry),
   nextLogId: Schema.Number,
-  maybeHoveredRouteId: Schema.Option(Schema.String),
-  maybeNotice: Schema.Option(Schema.String),
 })
 export type Model = typeof Model.Type

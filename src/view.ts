@@ -1,4 +1,4 @@
-import { Array, Match, Option, Result, pipe } from 'effect'
+import { Array, Option, Result, pipe } from 'effect'
 import type { Document, Html, HtmlBuilder } from 'foldkit/html'
 
 import {
@@ -25,31 +25,29 @@ import {
   ticketById,
 } from './domain/board'
 import {
+  type ClientPlayer as Player,
   canDrawFromDeck,
   canTakeMarketCard,
   countCards,
   currentPlayer,
-  hasAnyMove,
-  isHumanTurn,
-  isTicketComplete,
+  isViewerTurn as isHumanTurn,
+  isViewerTicketComplete,
   marketCardAt,
-  maybeClaimPayment,
   maybeRouteOwner,
   maybeTurnStep,
-} from './domain/game'
+  maybeViewerPayment,
+  viewerHasAnyMove,
+} from './domain/clientView'
 import { AnimateHandRow, HAND_CARD_DATA } from './handMotion'
 import { Message } from './message'
-import {
-  type Model,
-  Phase,
-  type Player,
-  type Standing,
-  type TurnStep,
-} from './model'
+import { Phase, type Standing, type TurnStep } from './model'
+import type { Table } from './table'
+import { resultsActionView, tableActionsView, tableTitle } from './tableChrome'
+
+type Model = Table
 
 // CONSTANTS
 
-const HUMAN_INDEX = 0
 const BOARD_VIEW_BOX = '40 30 920 566'
 const TICKET_RING_RADIUS = 25
 const ROUTE_INSET = 24
@@ -91,7 +89,11 @@ const DEFAULT_PLACEMENT: LabelPlacement = { dx: 0, dy: 48, anchor: 'middle' }
 const colorName = (card: Card | RouteColor): string =>
   card === 'Wild' ? 'Wild' : card === 'Gray' ? 'Any color' : card
 
-const playerTone = (playerIndex: number): string => `tone-p${playerIndex}`
+const playerTone = (player: Player | undefined): string =>
+  `tone-p${player?.tone ?? 0}`
+
+const seatTone = (model: Model, playerIndex: number): string =>
+  playerTone(model.players[playerIndex])
 
 const initialOf = (player: Player): string => player.name.slice(0, 1)
 
@@ -124,7 +126,7 @@ const routeGeometry = (route: Route) => {
 const isRouteClaimableByHuman = (model: Model, routeId: string): boolean =>
   isHumanTurn(model) &&
   Option.contains(maybeTurnStep(model), 'ChoosingAction') &&
-  Option.isSome(maybeClaimPayment(model, HUMAN_INDEX, routeId))
+  Option.isSome(maybeViewerPayment(model, routeId))
 
 const routeLabel = (model: Model, route: Route): string => {
   const base = `${cityPair(route.from, route.to)}, ${route.length} ${colorName(route.color)} cards, ${routePoints(route.length)} points`
@@ -148,7 +150,7 @@ const routeView = (
   const isClaimable = isRouteClaimableByHuman(model, route.id)
   const isHovered = Option.contains(model.maybeHoveredRouteId, route.id)
   const stateClass = Option.match(maybeOwner, {
-    onSome: owner => `route is-owned ${playerTone(owner)}`,
+    onSome: owner => `route is-owned ${seatTone(model, owner)}`,
     onNone: () =>
       `route is-open color-${route.color.toLowerCase()}${isClaimable ? ' is-claimable' : ''}`,
   })
@@ -210,11 +212,11 @@ const routeView = (
 const humanTicketCities = (model: Model) =>
   pipe(
     model.players,
-    Array.get(HUMAN_INDEX),
+    Array.get(model.viewerIndex),
     Option.map(player =>
       Array.map(player.ticketIds, ticketId => ({
         ticket: ticketById(ticketId),
-        isComplete: isTicketComplete(model, HUMAN_INDEX, ticketId),
+        isComplete: isViewerTicketComplete(model, ticketId),
       })),
     ),
     Option.getOrElse(() => []),
@@ -342,9 +344,14 @@ const statusText = (model: Model): string =>
     Dealing: () => 'Shuffling the deck…',
     GameOver: () => 'Final results are in.',
     Playing: ({ step }) => {
-      const player = currentPlayer(model)
-      if (player.kind === 'Bot') {
-        return `${player.name} is thinking…`
+      if (!isHumanTurn(model)) {
+        return Option.match(currentPlayer(model), {
+          onNone: () => 'Waiting…',
+          onSome: player =>
+            player.kind === 'Human'
+              ? `Waiting on ${player.name}…`
+              : `${player.name} is thinking…`,
+        })
       }
       return step === 'DrawingSecondCard'
         ? 'Take one more card. A face-up wild can’t be your second card.'
@@ -388,14 +395,7 @@ const headerView = (model: Model, h: HtmlBuilder<Message>): Html =>
             ),
         },
       ),
-      h.button(
-        [
-          h.Class('btn btn-quiet'),
-          h.Type('button'),
-          h.OnClick(Message.ClickedNewGame()),
-        ],
-        ['New game'],
-      ),
+      ...tableActionsView(model, h),
     ],
   )
 
@@ -410,7 +410,7 @@ const scoreboardView = (model: Model, h: HtmlBuilder<Message>): Html =>
         player.name,
         [
           h.Class(
-            `seat ${playerTone(playerIndex)}${isCurrent ? ' is-current' : ''}`,
+            `seat ${playerTone(player)}${isCurrent ? ' is-current' : ''}`,
           ),
           ...(isCurrent ? [h.AriaCurrent('step')] : []),
         ],
@@ -420,7 +420,10 @@ const scoreboardView = (model: Model, h: HtmlBuilder<Message>): Html =>
             [h.Class('seat-name')],
             [
               player.name,
-              isCurrent && player.kind === 'Bot'
+              player.kind === 'LeftToBot'
+                ? h.span([h.Class('bot-badge')], ['bot'])
+                : h.empty,
+              isCurrent && player.kind !== 'Human'
                 ? h.span(
                     [h.Class('thinking'), h.AriaHidden(true)],
                     [h.i([]), h.i([]), h.i([])],
@@ -435,7 +438,7 @@ const scoreboardView = (model: Model, h: HtmlBuilder<Message>): Html =>
           h.span(
             [h.Class('seat-meta')],
             [
-              `${player.trains} trains · ${player.hand.length} cards · ${player.ticketIds.length} tickets`,
+              `${player.trains} trains · ${player.handCount} cards · ${player.ticketCount} tickets`,
             ],
           ),
         ],
@@ -516,9 +519,7 @@ const marketView = (model: Model, h: HtmlBuilder<Message>): Html => {
           h.h2([h.Id('market-title')], ['Draw cards']),
           h.span(
             [h.Class('panel-note')],
-            [
-              `${model.deck.length} in deck · ${model.discard.length} discarded`,
-            ],
+            [`${model.deckCount} in deck · ${model.discardCount} discarded`],
           ),
         ],
       ),
@@ -552,7 +553,7 @@ const marketView = (model: Model, h: HtmlBuilder<Message>): Html => {
                       'Deck',
                       h.span(
                         [h.Class('card-kind'), h.AriaHidden(true)],
-                        [`${model.deck.length} cards`],
+                        [`${model.deckCount} cards`],
                       ),
                     ],
                   ),
@@ -640,7 +641,7 @@ const ticketsView = (
   const canDrawTicket =
     isHumanTurn(model) &&
     Option.contains(maybeTurnStep(model), 'ChoosingAction') &&
-    Array.isReadonlyArrayNonEmpty(model.ticketPile)
+    model.ticketPileCount > 0
 
   return h.section(
     [h.Class('panel tickets'), h.AriaLabelledBy('tickets-title')],
@@ -656,7 +657,7 @@ const ticketsView = (
               h.Disabled(!canDrawTicket),
               h.OnClick(Message.ClickedDrawTicket()),
             ],
-            [`Take a ticket (${model.ticketPile.length} left)`],
+            [`Take a ticket (${model.ticketPileCount} left)`],
           ),
         ],
       ),
@@ -664,7 +665,7 @@ const ticketsView = (
         [h.Class('ticket-list')],
         Array.map(player.ticketIds, ticketId => {
           const ticket = ticketById(ticketId)
-          const isComplete = isTicketComplete(model, HUMAN_INDEX, ticketId)
+          const isComplete = isViewerTicketComplete(model, ticketId)
           return h.keyed('li')(
             ticketId,
             [h.Class(`ticket${isComplete ? ' is-done' : ''}`)],
@@ -728,7 +729,7 @@ const logView = (model: Model, h: HtmlBuilder<Message>): Html =>
           Array.map(entry =>
             h.keyed('li')(
               entry.id,
-              [h.Class(`log-entry ${playerTone(entry.playerIndex)}`)],
+              [h.Class(`log-entry ${seatTone(model, entry.playerIndex)}`)],
               [h.span([h.Class('log-dot'), h.AriaHidden(true)]), entry.text],
             ),
           ),
@@ -748,7 +749,9 @@ const resultsView = (
     Array.head(standings),
     Option.map(winner => {
       const name = model.players[winner.playerIndex]?.name ?? ''
-      return winner.playerIndex === HUMAN_INDEX ? 'You win.' : `${name} wins.`
+      return winner.playerIndex === model.viewerIndex
+        ? 'You win.'
+        : `${name} wins.`
     }),
     Option.getOrElse(() => 'Game over.'),
   )
@@ -782,7 +785,7 @@ const resultsView = (
                 standing.playerIndex,
                 [
                   h.Class(
-                    `${playerTone(standing.playerIndex)}${rank === 0 ? ' is-winner' : ''}`,
+                    `${seatTone(model, standing.playerIndex)}${rank === 0 ? ' is-winner' : ''}`,
                   ),
                 ],
                 [
@@ -821,14 +824,7 @@ const resultsView = (
           ),
         ],
       ),
-      h.button(
-        [
-          h.Class('btn btn-primary'),
-          h.Type('button'),
-          h.OnClick(Message.ClickedNewGame()),
-        ],
-        ['Play again'],
-      ),
+      resultsActionView(model, h),
     ],
   )
 }
@@ -847,7 +843,7 @@ const noticeView = (model: Model, h: HtmlBuilder<Message>): Html =>
 const passView = (model: Model, h: HtmlBuilder<Message>): Html =>
   isHumanTurn(model) &&
   Option.contains(maybeTurnStep(model), 'ChoosingAction') &&
-  !hasAnyMove(model, HUMAN_INDEX)
+  !viewerHasAnyMove(model)
     ? h.button(
         [
           h.Class('btn btn-primary'),
@@ -867,7 +863,7 @@ const playAreaView = (model: Model, h: HtmlBuilder<Message>): Html =>
       Playing: () =>
         pipe(
           model.players,
-          Array.get(HUMAN_INDEX),
+          Array.get(model.viewerIndex),
           Option.match({
             onNone: () => [boardView(model, h)],
             onSome: human => [
@@ -905,7 +901,7 @@ const sidebarPanels = (
     Playing: () =>
       pipe(
         model.players,
-        Array.get(HUMAN_INDEX),
+        Array.get(model.viewerIndex),
         Option.match({
           onNone: () => [h.div([h.Class('panel is-loading')], ['Dealing…'])],
           onSome: human => [
@@ -917,11 +913,8 @@ const sidebarPanels = (
       ),
   })
 
-export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
-  title: Match.value(isHumanTurn(model)).pipe(
-    Match.when(true, () => 'Your turn · All Aboard'),
-    Match.orElse(() => 'All Aboard'),
-  ),
+export const tableView = (model: Model, h: HtmlBuilder<Message>): Document => ({
+  title: tableTitle(isHumanTurn(model)),
   body: h.div(
     [h.Class('app')],
     [

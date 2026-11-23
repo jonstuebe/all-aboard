@@ -1,13 +1,16 @@
-import { Array, Option, Order, Schema, pipe } from 'effect'
+import { Array, Option, Order, Result, Schema, pipe } from 'effect'
 import { defineTaggedUnion } from 'foldkit/schema'
 import { modifyFields } from 'foldkit/struct'
 
 import {
+  MAX_SEATS,
+  MIN_SEATS,
   type Model,
   Phase,
   type Player,
-  type PlayerKind,
+  type SeatConfig,
   type Standing,
+  TONE_COUNT,
   type TurnStep,
 } from '../model'
 import {
@@ -25,6 +28,7 @@ import {
   TICKETS,
   WILD_CARDS,
   cityById,
+  maybeRouteById,
   routeById,
   routePoints,
   ticketById,
@@ -44,11 +48,34 @@ export type PlayerAction = typeof PlayerAction.Type
 
 // SETUP
 
-const SEATS: ReadonlyArray<Readonly<{ name: string; kind: PlayerKind }>> = [
-  { name: 'You', kind: 'Human' },
-  { name: 'Juniper', kind: 'Bot' },
-  { name: 'Rook', kind: 'Bot' },
+export const BOT_NAMES: ReadonlyArray<string> = [
+  'Juniper',
+  'Rook',
+  'Hazel',
+  'Ozzie',
+  'Marlow',
 ]
+
+export const clampSeatCount = (count: number): number =>
+  Math.min(MAX_SEATS, Math.max(MIN_SEATS, Math.round(count)))
+
+export const localSeats = (
+  humanName: string,
+  seatCount: number,
+): ReadonlyArray<SeatConfig> =>
+  Array.makeBy(clampSeatCount(seatCount), (index): SeatConfig =>
+    index === 0
+      ? { name: humanName, kind: 'Human', tone: 0 }
+      : {
+          name: pipe(
+            BOT_NAMES,
+            Array.get(index - 1),
+            Option.getOrElse(() => `Bot ${index}`),
+          ),
+          kind: 'Bot',
+          tone: index % TONE_COUNT,
+        },
+  )
 
 const MAX_TURNS = 240
 const MAX_LOG_ENTRIES = 40
@@ -75,19 +102,21 @@ export const emptyModel = (gameId: number): Model => ({
   turnNumber: 0,
   log: [],
   nextLogId: 0,
-  maybeHoveredRouteId: Option.none(),
-  maybeNotice: Option.none(),
 })
 
-export const newGame = (seed: number): Model => {
+export const newGame = (
+  seed: number,
+  seats: ReadonlyArray<SeatConfig>,
+): Model => {
   const [deck, deckState] = shuffle(FULL_DECK, seed)
   const [ticketIds, ticketState] = shuffle(
     Array.map(TICKETS, ticket => ticket.id),
     deckState,
   )
-  const players = Array.map(SEATS, (seat, index): Player => ({
+  const players = Array.map(seats, (seat, index): Player => ({
     name: seat.name,
     kind: seat.kind,
+    tone: seat.tone,
     hand: pipe(
       deck,
       Array.drop(index * STARTING_HAND_SIZE),
@@ -101,8 +130,8 @@ export const newGame = (seed: number): Model => {
       Array.take(STARTING_TICKETS),
     ),
   }))
-  const dealtCards = SEATS.length * STARTING_HAND_SIZE
-  const dealtTickets = SEATS.length * STARTING_TICKETS
+  const dealtCards = seats.length * STARTING_HAND_SIZE
+  const dealtTickets = seats.length * STARTING_TICKETS
 
   const dealt = modifyFields(emptyModel(seed), {
     phase: () => Phase.Playing({ step: 'ChoosingAction' }),
@@ -141,11 +170,14 @@ export const maybeTurnStep = (model: Model): Option.Option<TurnStep> =>
     GameOver: () => Option.none(),
   })
 
+export const isBotControlled = (player: Player): boolean =>
+  player.kind !== 'Human'
+
 export const isHumanTurn = (model: Model): boolean =>
-  Option.isSome(maybeTurnStep(model)) && currentPlayer(model).kind === 'Human'
+  Option.isSome(maybeTurnStep(model)) && !isBotControlled(currentPlayer(model))
 
 export const isBotTurn = (model: Model): boolean =>
-  Option.isSome(maybeTurnStep(model)) && currentPlayer(model).kind === 'Bot'
+  Option.isSome(maybeTurnStep(model)) && isBotControlled(currentPlayer(model))
 
 export const countCards = (hand: ReadonlyArray<Card>, card: Card): number =>
   Array.filter(hand, held => held === card).length
@@ -173,8 +205,10 @@ const canDrawSecondCard = (model: Model): boolean =>
     canTakeMarketCard(model, slot, 'DrawingSecondCard'),
   )
 
+export type HasClaims = Readonly<{ claims: Model['claims'] }>
+
 export const maybeRouteOwner = (
-  model: Model,
+  model: HasClaims,
   routeId: string,
 ): Option.Option<number> =>
   pipe(
@@ -257,7 +291,11 @@ export const claimBlockReason = (
 
 // TICKETS
 
-const reachableCities = (model: Model, playerIndex: number, start: string) => {
+const reachableCities = (
+  model: HasClaims,
+  playerIndex: number,
+  start: string,
+) => {
   const ownedRoutes = Array.filter(ROUTES, route =>
     Option.contains(maybeRouteOwner(model, route.id), playerIndex),
   )
@@ -292,7 +330,7 @@ const reachableCities = (model: Model, playerIndex: number, start: string) => {
 }
 
 export const isTicketComplete = (
-  model: Model,
+  model: HasClaims,
   playerIndex: number,
   ticketId: string,
 ): boolean => {
@@ -339,15 +377,28 @@ export const addLog = (
   model: Model,
   playerIndex: number,
   text: string,
+  maybeSelfText: Option.Option<string> = Option.none(),
 ): Model =>
   modifyFields(model, {
     log: log =>
       Array.takeRight(
-        Array.append(log, { id: model.nextLogId, playerIndex, text }),
+        Array.append(log, {
+          id: model.nextLogId,
+          playerIndex,
+          text,
+          maybeSelfText,
+        }),
         MAX_LOG_ENTRIES,
       ),
     nextLogId: id => id + 1,
   })
+
+const addSeatLog = (
+  model: Model,
+  playerIndex: number,
+  text: string,
+  selfText: string,
+): Model => addLog(model, playerIndex, text, Option.some(selfText))
 
 const modifyPlayer = (
   model: Model,
@@ -473,10 +524,11 @@ const endTurn = (model: Model): Model => {
     Option.isNone(model.maybeFinalTurnsLeft) &&
     Option.isSome(maybeFinalTurnsLeft)
   const announced = triggeredFinalRound
-    ? addLog(
+    ? addSeatLog(
         model,
         model.currentPlayerIndex,
-        `${player.name} ${player.kind === 'Human' ? 'are' : 'is'} down to ${player.trains} trains. Everyone gets one last turn.`,
+        `${player.name} is down to ${player.trains} trains. Everyone gets one last turn.`,
+        `You are down to ${player.trains} trains. Everyone gets one last turn.`,
       )
     : model
 
@@ -486,7 +538,6 @@ const endTurn = (model: Model): Model => {
   if (isOver) {
     const finished = modifyFields(announced, {
       maybeFinalTurnsLeft: () => maybeFinalTurnsLeft,
-      maybeNotice: () => Option.none(),
     })
     return modifyFields(finished, {
       phase: () => Phase.GameOver({ standings: standings(finished) }),
@@ -498,7 +549,6 @@ const endTurn = (model: Model): Model => {
     currentPlayerIndex: index => (index + 1) % model.players.length,
     maybeFinalTurnsLeft: () => maybeFinalTurnsLeft,
     turnNumber: turnNumber => turnNumber + 1,
-    maybeNotice: () => Option.none(),
   })
 }
 
@@ -506,17 +556,17 @@ const afterDraw = (model: Model, step: TurnStep, endsTurn: boolean): Model =>
   step === 'ChoosingAction' && !endsTurn && canDrawSecondCard(model)
     ? modifyFields(model, {
         phase: () => Phase.Playing({ step: 'DrawingSecondCard' }),
-        maybeNotice: () => Option.none(),
       })
     : endTurn(model)
 
-const withNotice = (model: Model, notice: string): Model =>
-  modifyFields(model, { maybeNotice: () => Option.some(notice) })
+export type ActionResult = Result.Result<Model, string>
 
-const describeDraw = (player: Player, card: Card): string =>
-  player.kind === 'Human'
-    ? `You drew a ${card === 'Wild' ? 'wild' : card.toLowerCase()} card from the deck.`
-    : `${player.name} drew from the deck.`
+const accept = (model: Model): ActionResult => Result.succeed(model)
+
+const reject = (reason: string): ActionResult => Result.fail(reason)
+
+const cardName = (card: Card): string =>
+  card === 'Wild' ? 'wild' : card.toLowerCase()
 
 export const hasAnyMove = (model: Model, playerIndex: number): boolean =>
   canDrawFromDeck(model) ||
@@ -530,37 +580,41 @@ const applyInStep = (
   model: Model,
   step: TurnStep,
   action: PlayerAction,
-): Model => {
+): ActionResult => {
   const playerIndex = model.currentPlayerIndex
   const player = currentPlayer(model)
 
-  return PlayerAction.match<Model>(action, {
+  return PlayerAction.match<ActionResult>(action, {
     DrewFromDeck: () => {
       const [maybeCard, drawn] = drawTop(model)
       return Option.match(maybeCard, {
-        onNone: () => withNotice(model, 'The deck and discard pile are empty.'),
+        onNone: () => reject('The deck and discard pile are empty.'),
         onSome: card =>
-          afterDraw(
-            addLog(
-              modifyPlayer(drawn, playerIndex, held =>
-                modifyFields(held, { hand: hand => Array.append(hand, card) }),
+          accept(
+            afterDraw(
+              addSeatLog(
+                modifyPlayer(drawn, playerIndex, held =>
+                  modifyFields(held, {
+                    hand: hand => Array.append(hand, card),
+                  }),
+                ),
+                playerIndex,
+                `${player.name} drew from the deck.`,
+                `You drew a ${cardName(card)} card from the deck.`,
               ),
-              playerIndex,
-              describeDraw(player, card),
+              step,
+              false,
             ),
-            step,
-            false,
           ),
       })
     },
 
     TookMarketCard: ({ slot }) =>
       Option.match(marketCardAt(model, slot), {
-        onNone: () => withNotice(model, 'That market slot is empty.'),
+        onNone: () => reject('That market slot is empty.'),
         onSome: card => {
           if (step === 'DrawingSecondCard' && card === 'Wild') {
-            return withNotice(
-              model,
+            return reject(
               'A face-up wild uses your whole turn, so it can only be your first draw.',
             )
           }
@@ -573,25 +627,30 @@ const applyInStep = (
             refillMarket,
             normalizeMarket,
           )
-          return afterDraw(
-            addLog(
-              taken,
-              playerIndex,
-              `${player.name} took a face-up ${card === 'Wild' ? 'wild' : card.toLowerCase()} card.`,
+          return accept(
+            afterDraw(
+              addSeatLog(
+                taken,
+                playerIndex,
+                `${player.name} took a face-up ${cardName(card)} card.`,
+                `You took a face-up ${cardName(card)} card.`,
+              ),
+              step,
+              card === 'Wild',
             ),
-            step,
-            card === 'Wild',
           )
         },
       }),
 
     ClaimedRoute: ({ routeId }) => {
       if (step === 'DrawingSecondCard') {
-        return withNotice(model, 'Draw your second card to finish this turn.')
+        return reject('Draw your second card to finish this turn.')
+      }
+      if (Option.isNone(maybeRouteById(routeId))) {
+        return reject('That route does not exist.')
       }
       return Option.match(maybeClaimPayment(model, playerIndex, routeId), {
-        onNone: () =>
-          withNotice(model, claimBlockReason(model, playerIndex, routeId)),
+        onNone: () => reject(claimBlockReason(model, playerIndex, routeId)),
         onSome: payment => {
           const route = routeById(routeId)
           const spent: ReadonlyArray<Card> = Array.appendAll(
@@ -618,11 +677,16 @@ const applyInStep = (
                 discard: discard => Array.appendAll(discard, spent),
               }),
           )
-          return endTurn(
-            addLog(
-              claimed,
-              playerIndex,
-              `${player.name} claimed ${cityById(route.from).name} to ${cityById(route.to).name} for ${routePoints(route.length)} points.`,
+          const routeName = `${cityById(route.from).name} to ${cityById(route.to).name}`
+          const points = routePoints(route.length)
+          return accept(
+            endTurn(
+              addSeatLog(
+                claimed,
+                playerIndex,
+                `${player.name} claimed ${routeName} for ${points} points.`,
+                `You claimed ${routeName} for ${points} points.`,
+              ),
             ),
           )
         },
@@ -631,10 +695,10 @@ const applyInStep = (
 
     DrewTicket: () => {
       if (step === 'DrawingSecondCard') {
-        return withNotice(model, 'Draw your second card to finish this turn.')
+        return reject('Draw your second card to finish this turn.')
       }
       return Array.match(model.ticketPile, {
-        onEmpty: () => withNotice(model, 'No destination tickets are left.'),
+        onEmpty: () => reject('No destination tickets are left.'),
         onNonEmpty: ([ticketId, ...rest]) => {
           const ticket = ticketById(ticketId)
           const drawn = modifyFields(
@@ -645,13 +709,14 @@ const applyInStep = (
             ),
             { ticketPile: () => rest },
           )
-          return endTurn(
-            addLog(
-              drawn,
-              playerIndex,
-              player.kind === 'Human'
-                ? `You took a ticket: ${cityById(ticket.from).name} to ${cityById(ticket.to).name}, ${ticket.points} points.`
-                : `${player.name} took a destination ticket.`,
+          return accept(
+            endTurn(
+              addSeatLog(
+                drawn,
+                playerIndex,
+                `${player.name} took a destination ticket.`,
+                `You took a ticket: ${cityById(ticket.from).name} to ${cityById(ticket.to).name}, ${ticket.points} points.`,
+              ),
             ),
           )
         },
@@ -660,23 +725,63 @@ const applyInStep = (
 
     Passed: () => {
       if (step === 'ChoosingAction' && hasAnyMove(model, playerIndex)) {
-        return withNotice(model, 'You still have a move, so you can’t pass.')
+        return reject('You still have a move, so you can’t pass.')
       }
-      return endTurn(
-        addLog(
-          model,
-          playerIndex,
+      return accept(
+        endTurn(
           step === 'DrawingSecondCard'
-            ? `${player.name} ended the turn after one card.`
-            : `${player.name} passed.`,
+            ? addSeatLog(
+                model,
+                playerIndex,
+                `${player.name} ended the turn after one card.`,
+                'You ended your turn after one card.',
+              )
+            : addSeatLog(
+                model,
+                playerIndex,
+                `${player.name} passed.`,
+                'You passed.',
+              ),
         ),
       )
     },
   })
 }
 
-export const applyAction = (model: Model, action: PlayerAction): Model =>
+export const applyAction = (model: Model, action: PlayerAction): ActionResult =>
   Option.match(maybeTurnStep(model), {
-    onNone: () => model,
+    onNone: () => reject('The game is not in progress.'),
     onSome: step => applyInStep(model, step, action),
+  })
+
+// NOTE: applyAction trusts that the current player is acting. Anything that
+// acts on behalf of a seat (the server, the local table) goes through actAs,
+// which checks the seat first.
+export const actAs = (
+  model: Model,
+  seatIndex: number,
+  action: PlayerAction,
+): ActionResult => {
+  if (Option.isNone(maybeTurnStep(model))) {
+    return reject('The game is not in progress.')
+  }
+  if (seatIndex !== model.currentPlayerIndex) {
+    return reject('It’s not your turn.')
+  }
+  return applyAction(model, action)
+}
+
+export const handSeatToBot = (model: Model, seatIndex: number): Model =>
+  Option.match(Array.get(model.players, seatIndex), {
+    onNone: () => model,
+    onSome: player =>
+      player.kind !== 'Human'
+        ? model
+        : addLog(
+            modifyPlayer(model, seatIndex, held =>
+              modifyFields(held, { kind: () => 'LeftToBot' }),
+            ),
+            seatIndex,
+            `${player.name} left the game. A bot took the seat.`,
+          ),
   })
