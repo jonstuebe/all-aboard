@@ -5,13 +5,13 @@ A small train route-building game built with [Foldkit](https://foldkit.dev): Elm
 ## Run it
 
 ```bash
-npm install
-npm run dev
+bun install
+bun run dev
 ```
 
 Then open http://localhost:5188. The dev server listens on every network interface and accepts `*.ts.net` hostnames, so it's also reachable at `http://<your-machine>.<tailnet>.ts.net:5188` over Tailscale.
 
-Other scripts: `npm test` (Vitest), `npm run typecheck`, `npm run lint`, `npm run build`.
+Other scripts: `bun run test` (Vitest), `bun run typecheck`, `bun run lint`, `bun run build`.
 
 ## How to play
 

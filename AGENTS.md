@@ -18,3 +18,4 @@ Domain vocabulary, deployment steps, local conventions that differ from Foldkit'
 - Design context lives in `PRODUCT.md` (impeccable skill).
 - The dev server runs on port 5188 (5173 is taken on this machine) and is exposed to `*.ts.net` for Tailscale previews.
 - All illustration (train cars, track, pieces, depots, the US map backdrop) is static SVG markup in `src/art.ts`, set through `h.InnerHTML` and styled only from `src/styles.css`. The map is projected from longitude/latitude with the same formula that places the cities in `src/domain/board.ts`; move a city and the backdrop still lines up.
+- Package manager is Bun (versions pinned in `mise.toml`; Node is still the runtime for Vite/Vitest). Use `bun install` / `bun add`, and `bun run test` for Vitest (plain `bun test` starts Bun's own test runner, which is wrong here). Don't add a `package-lock.json`.
