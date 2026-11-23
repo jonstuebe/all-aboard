@@ -366,9 +366,9 @@ const headerView = (model: Model, h: HtmlBuilder<Message>): Html =>
       h.div(
         [h.Class('brand')],
         [
-          h.span([h.Class('rivet'), h.AriaHidden(true)]),
+          h.span([h.Class('brand-mark'), h.AriaHidden(true)]),
           h.h1([h.Class('brand-name')], ['All Aboard']),
-          h.span([h.Class('rivet'), h.AriaHidden(true)]),
+          h.span([h.Class('brand-mark is-end'), h.AriaHidden(true)]),
         ],
       ),
       h.p(
