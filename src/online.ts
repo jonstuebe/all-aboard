@@ -33,6 +33,7 @@ export const OnlineGame = Schema.Struct({
   joinTone: Schema.Number,
   isPinging: Schema.Boolean,
   isConfirmingLeave: Schema.Boolean,
+  isCodeCopied: Schema.Boolean,
 })
 export type OnlineGame = typeof OnlineGame.Type
 
@@ -49,6 +50,7 @@ export const openOnlineGame = (
   joinTone: 0,
   isPinging: false,
   isConfirmingLeave: false,
+  isCodeCopied: false,
 })
 
 export const withNotice = (

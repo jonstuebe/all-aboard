@@ -1,8 +1,8 @@
 import { Array, Option } from 'effect'
 import type { Html, HtmlBuilder } from 'foldkit/html'
 
-import { MAX_SEATS, MIN_SEATS, TONE_COUNT } from '../model'
 import { Message } from '../message'
+import { MAX_SEATS, MIN_SEATS, TONE_COUNT } from '../model'
 import type { OnlineGame } from '../online'
 import { type LobbySeat, NAME_MAX_LENGTH } from '../protocol'
 import { screenFrame } from './frame'
@@ -69,10 +69,14 @@ const seatRow = (
       h.span(
         [h.Class('lobby-seat-name')],
         [
-          seat.name,
-          seat.isYou ? h.small([], [' (you)']) : h.empty,
-          seat.kind === 'Bot' ? h.span([h.Class('bot-badge')], ['bot']) : h.empty,
-          seat.isHost ? h.span([h.Class('host-badge')], ['host']) : h.empty,
+          h.span([h.Class('lobby-seat-label')], [seat.name]),
+          seat.isYou ? h.span([h.Class('seat-tag is-you')], ['You']) : h.empty,
+          seat.isHost
+            ? h.span([h.Class('seat-tag is-host')], ['Host'])
+            : h.empty,
+          seat.kind === 'Bot'
+            ? h.span([h.Class('seat-tag is-bot')], ['Bot'])
+            : h.empty,
         ],
       ),
       lobby.isRematch
@@ -84,10 +88,12 @@ const seatRow = (
       lobby.isViewerHost && !seat.isYou
         ? h.button(
             [
-              h.Class('btn btn-small btn-quiet'),
+              h.Class('btn btn-text btn-compact'),
               h.Type('button'),
               h.AriaLabel(`Remove ${seat.name}`),
-              h.OnClick(Message.ClickedRemoveSeat({ seatIndex: seat.seatIndex })),
+              h.OnClick(
+                Message.ClickedRemoveSeat({ seatIndex: seat.seatIndex }),
+              ),
             ],
             ['Remove'],
           )
@@ -99,8 +105,9 @@ const joinForm = (
   game: OnlineGame,
   lobby: LobbySnapshot,
   h: HtmlBuilder<Message>,
-): Html =>
-  h.form(
+): Html => {
+  const isFull = lobby.seats.length >= MAX_SEATS
+  return h.form(
     [h.Class('join-lobby'), h.OnSubmit(Message.SubmittedJoinLobby())],
     [
       h.label(
@@ -117,18 +124,27 @@ const joinForm = (
           ]),
         ],
       ),
-      h.span([h.Class('field-label')], ['Pick a colour for this game']),
+      h.span([h.Class('field-label')], ['Your colour']),
       tonePicker(lobby, game.joinTone, h),
       h.button(
         [
-          h.Class('btn btn-primary'),
+          h.Class('btn btn-red btn-block lobby-primary'),
           h.Type('submit'),
-          h.Disabled(lobby.seats.length >= MAX_SEATS),
+          h.Disabled(isFull),
         ],
-        [lobby.seats.length >= MAX_SEATS ? 'This lobby is full' : 'Take a seat'],
+        [isFull ? 'This lobby is full' : 'Take a seat'],
+      ),
+      h.button(
+        [
+          h.Class('btn btn-text lobby-leave'),
+          h.Type('button'),
+          h.OnClick(Message.ClickedMenu()),
+        ],
+        ['Cancel'],
       ),
     ],
   )
+}
 
 const viewerTone = (lobby: LobbySnapshot): number =>
   Option.match(
@@ -136,7 +152,42 @@ const viewerTone = (lobby: LobbySnapshot): number =>
     { onNone: () => 0, onSome: seat => seat.tone },
   )
 
-const seatedControls = (lobby: LobbySnapshot, h: HtmlBuilder<Message>): Html => {
+const playersWord = (count: number): string =>
+  count === 1 ? 'player' : 'players'
+
+const primaryAction = (
+  lobby: LobbySnapshot,
+  readySeats: number,
+  h: HtmlBuilder<Message>,
+): Html => {
+  if (!lobby.isViewerHost) {
+    return h.p(
+      [h.Class('lobby-wait'), h.Role('status')],
+      ['Waiting for the host to start the game…'],
+    )
+  }
+  const missing = MIN_SEATS - readySeats
+  return h.button(
+    [
+      h.Class('btn btn-red btn-block lobby-primary'),
+      h.Type('button'),
+      h.Disabled(missing > 0),
+      h.OnClick(Message.ClickedStartGame()),
+    ],
+    [
+      missing > 0
+        ? `Waiting for ${missing} more ${playersWord(missing)}`
+        : lobby.isRematch
+          ? `Start rematch (${readySeats} ready)`
+          : 'Start game',
+    ],
+  )
+}
+
+const seatedControls = (
+  lobby: LobbySnapshot,
+  h: HtmlBuilder<Message>,
+): Html => {
   const readySeats = lobby.isRematch
     ? Array.filter(lobby.seats, seat => seat.isReady).length
     : lobby.seats.length
@@ -149,60 +200,82 @@ const seatedControls = (lobby: LobbySnapshot, h: HtmlBuilder<Message>): Html => 
     [
       h.span([h.Class('field-label')], ['Your colour']),
       tonePicker(lobby, viewerTone(lobby), h),
-      h.div(
-        [h.Class('menu-actions')],
-        [
-          lobby.isRematch && !lobby.isViewerHost
-            ? h.button(
-                [
-                  h.Class(`btn${isViewerReady ? '' : ' btn-primary'}`),
-                  h.Type('button'),
-                  h.OnClick(Message.ClickedReady({ isReady: !isViewerReady })),
-                ],
-                [isViewerReady ? 'Not ready' : 'Ready'],
-              )
-            : h.empty,
-          lobby.isViewerHost
-            ? h.button(
-                [
-                  h.Class('btn'),
-                  h.Type('button'),
-                  h.Disabled(lobby.seats.length >= MAX_SEATS),
-                  h.OnClick(Message.ClickedAddBot()),
-                ],
-                ['Add a bot'],
-              )
-            : h.empty,
-          lobby.isViewerHost
-            ? h.button(
-                [
-                  h.Class('btn btn-primary'),
-                  h.Type('button'),
-                  h.Disabled(readySeats < MIN_SEATS),
-                  h.OnClick(Message.ClickedStartGame()),
-                ],
-                [
-                  readySeats < MIN_SEATS
-                    ? `Waiting for ${MIN_SEATS - readySeats} more`
-                    : lobby.isRematch
-                      ? `Start rematch (${readySeats} ready)`
-                      : 'Start game',
-                ],
-              )
-            : h.p([h.Class('lobby-wait')], ['Waiting for the host to start…']),
-          h.button(
+      lobby.isViewerHost
+        ? h.button(
             [
-              h.Class('btn btn-quiet'),
+              h.Class('btn btn-cream btn-block'),
               h.Type('button'),
-              h.OnClick(Message.ClickedLeaveLobby()),
+              h.Disabled(lobby.seats.length >= MAX_SEATS),
+              h.OnClick(Message.ClickedAddBot()),
             ],
-            ['Leave lobby'],
-          ),
+            ['Add a bot'],
+          )
+        : h.empty,
+      lobby.isRematch && !lobby.isViewerHost
+        ? h.button(
+            [
+              h.Class(
+                `btn btn-block ${isViewerReady ? 'btn-cream' : 'btn-green'}`,
+              ),
+              h.Type('button'),
+              h.OnClick(Message.ClickedReady({ isReady: !isViewerReady })),
+            ],
+            [isViewerReady ? 'Not ready after all' : 'I’m ready'],
+          )
+        : h.empty,
+      primaryAction(lobby, readySeats, h),
+      h.button(
+        [
+          h.Class('btn btn-text lobby-leave'),
+          h.Type('button'),
+          h.OnClick(Message.ClickedLeaveLobby()),
         ],
+        ['Cancel'],
       ),
     ],
   )
 }
+
+const inviteBlock = (
+  game: OnlineGame,
+  lobby: LobbySnapshot,
+  h: HtmlBuilder<Message>,
+): Html =>
+  h.div(
+    [h.Class('invite-block')],
+    [
+      h.span(
+        [h.Id('invite-code-label'), h.Class('field-label')],
+        ['Invite code'],
+      ),
+      h.div(
+        [h.Class('invite-code-row')],
+        [
+          h.output(
+            [h.Class('invite-code'), h.AriaLabelledBy('invite-code-label')],
+            [lobby.code],
+          ),
+          h.button(
+            [
+              h.Class('btn btn-cream btn-compact'),
+              h.Type('button'),
+              h.AriaLabel(`Copy invite code ${lobby.code}`),
+              h.OnClick(Message.ClickedCopyCode()),
+            ],
+            [game.isCodeCopied ? 'Copied' : 'Copy'],
+          ),
+        ],
+      ),
+      h.button(
+        [
+          h.Class('btn btn-cream btn-block'),
+          h.Type('button'),
+          h.OnClick(Message.ClickedShareInvite()),
+        ],
+        ['Share invite link'],
+      ),
+    ],
+  )
 
 export const lobbyView = (
   game: OnlineGame,
@@ -214,36 +287,21 @@ export const lobbyView = (
       h.section(
         [h.Class('panel menu-card lobby'), h.AriaLabelledBy('lobby-title')],
         [
-          h.p(
-            [h.Class('results-kicker')],
-            [lobby.isRematch ? 'Rematch · same seats' : 'Lobby · invite your friends'],
-          ),
-          h.h2([h.Id('lobby-title'), h.Class('invite-code')], [lobby.code]),
-          h.div(
-            [h.Class('menu-actions')],
+          h.h2(
+            [h.Id('lobby-title'), h.Class('menu-heading')],
             [
-              h.button(
-                [
-                  h.Class('btn'),
-                  h.Type('button'),
-                  h.OnClick(Message.ClickedShareInvite()),
-                ],
-                ['Share invite link'],
-              ),
-              h.button(
-                [
-                  h.Class('btn btn-quiet'),
-                  h.Type('button'),
-                  h.OnClick(Message.ClickedMenu()),
-                ],
-                ['Menu'],
-              ),
+              lobby.isRematch
+                ? 'Rematch: same seats'
+                : lobby.isViewerSeated
+                  ? 'Invite your friends'
+                  : 'Join this game',
             ],
           ),
+          inviteBlock(game, lobby, h),
           noticeView(game, h),
           h.h3(
-            [h.Class('menu-subheading')],
-            [`Seats ${lobby.seats.length} of ${MAX_SEATS}`],
+            [h.Class('lobby-seats-heading')],
+            [`Seats: ${lobby.seats.length} of ${MAX_SEATS}`],
           ),
           h.ol(
             [h.Class('lobby-seats'), h.AriaLive('polite')],
@@ -272,7 +330,7 @@ export const messageScreen = (
           h.p([h.Class('menu-detail')], [detail]),
           h.button(
             [
-              h.Class('btn btn-primary'),
+              h.Class('btn btn-red btn-block'),
               h.Type('button'),
               h.OnClick(Message.ClickedMenu()),
             ],

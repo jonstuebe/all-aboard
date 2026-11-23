@@ -17,7 +17,7 @@ const quietButton = (
 ): Html =>
   h.button(
     [
-      h.Class('btn btn-quiet'),
+      h.Class('btn btn-cream btn-compact topbar-btn'),
       h.Type('button'),
       h.Disabled(isDisabled),
       h.OnClick(message),
@@ -65,7 +65,7 @@ export const resultsActionView = (
 ): Html =>
   h.button(
     [
-      h.Class('btn btn-primary'),
+      h.Class('btn btn-red'),
       h.Type('button'),
       h.OnClick(
         TableMode.match(table.mode, {

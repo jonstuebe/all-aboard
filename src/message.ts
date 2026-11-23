@@ -23,6 +23,11 @@ export const Message = defineMessageUnion({
   FailedCreateGame: { reason: Schema.String },
   UpdatedJoinCode: { value: Schema.String },
   SubmittedJoinCode: {},
+  SubmittedName: {},
+  ClickedPlayWithBots: {},
+  ClickedHaveInviteCode: {},
+  ClickedWizardBack: {},
+  ClickedChangeName: {},
   SucceededFetchMenu: { menu: Menu },
   FailedFetchMenu: {},
   CompletedQueueLocalResult: {},
@@ -68,6 +73,8 @@ export const Message = defineMessageUnion({
   ClickedReady: { isReady: Schema.Boolean },
   ClickedShareInvite: {},
   CompletedShareInvite: {},
+  ClickedCopyCode: {},
+  CompletedCopyCode: { didCopy: Schema.Boolean },
 
   // SOCKET
   ConnectedGameSocket: {},

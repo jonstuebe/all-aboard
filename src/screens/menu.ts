@@ -55,7 +55,7 @@ const pingButton = (
       const isReady = waitMinutes <= 0
       return h.button(
         [
-          h.Class('btn btn-small'),
+          h.Class('btn btn-cream btn-compact'),
           h.Type('button'),
           h.Disabled(!isReady),
           h.AriaLabel(
@@ -143,17 +143,23 @@ const statTile = (
     ],
   )
 
+/** Stats appear only once there is a record: at least one finished game. */
+export const hasStats = (stats: Stats): boolean => stats.gamesPlayed > 0
+
 const statsCard = (stats: Stats, h: HtmlBuilder<Message>): Html =>
-  h.section(
-    [h.Class('panel menu-card menu-stats'), h.AriaLabelledBy('stats-title')],
-    [
-      h.h2(
-        [h.Id('stats-title'), h.Class('menu-subheading is-first')],
-        ['Stats'],
-      ),
-      stats.gamesPlayed === 0
-        ? h.p([h.Class('menu-detail')], ['Finish a game to start your record.'])
-        : h.dl(
+  !hasStats(stats)
+    ? h.empty
+    : h.section(
+        [
+          h.Class('panel menu-card menu-stats'),
+          h.AriaLabelledBy('stats-title'),
+        ],
+        [
+          h.h2(
+            [h.Id('stats-title'), h.Class('menu-subheading is-first')],
+            ['Stats'],
+          ),
+          h.dl(
             [h.Class('stat-grid')],
             [
               statTile('Games played', String(stats.gamesPlayed), h),
@@ -168,8 +174,8 @@ const statsCard = (stats: Stats, h: HtmlBuilder<Message>): Html =>
               statTile('Tickets completed', String(stats.ticketsCompleted), h),
             ],
           ),
-    ],
-  )
+        ],
+      )
 
 const loadedView = (
   menu: Menu,
