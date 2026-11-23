@@ -13,6 +13,11 @@
     "isolatedModules": true,
     "noEmit": true
   },
-  "include": ["./**/*.ts", "../src/domain/**/*.ts", "../src/model.ts", "../src/protocol.ts"],
+  "include": [
+    "./**/*.ts",
+    "../src/domain/**/*.ts",
+    "../src/model.ts",
+    "../src/protocol.ts"
+  ],
   "exclude": ["../src/**/*.test.ts"]
 }

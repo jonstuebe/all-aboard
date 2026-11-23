@@ -1,5 +1,5 @@
-import { env } from 'cloudflare:workers'
 import { runDurableObjectAlarm } from 'cloudflare:test'
+import { env } from 'cloudflare:workers'
 import { Option } from 'effect'
 import { describe, expect, test } from 'vitest'
 
@@ -48,10 +48,15 @@ describe('server-side bots', () => {
     const host = await connect(hostDevice, code)
     host.send(ClientMessage.AddBot())
     await host.waitFor(
-      m => m._tag === 'Snapshot' && m.snapshot._tag === 'Lobby' && m.snapshot.seats.length === 2,
+      m =>
+        m._tag === 'Snapshot' &&
+        m.snapshot._tag === 'Lobby' &&
+        m.snapshot.seats.length === 2,
     )
     host.send(ClientMessage.StartGame())
-    await host.waitFor(m => m._tag === 'Snapshot' && m.snapshot._tag === 'Table')
+    await host.waitFor(
+      m => m._tag === 'Snapshot' && m.snapshot._tag === 'Table',
+    )
 
     await playUntilOver([host])
     const final = Option.getOrThrow(tableView(host.latest()))
@@ -68,10 +73,14 @@ describe('lifecycle alarms', () => {
     const code = await createGame(hostDevice, 'Ada')
 
     await advance(code, WARN_AFTER_MS - HOUR)
-    expect(Option.getOrThrow(await room(code)).maybeWarnedAt).toEqual(Option.none())
+    expect(Option.getOrThrow(await room(code)).maybeWarnedAt).toEqual(
+      Option.none(),
+    )
 
     await advance(code, HOUR)
-    expect(Option.isSome(Option.getOrThrow(await room(code)).maybeWarnedAt)).toBe(true)
+    expect(
+      Option.isSome(Option.getOrThrow(await room(code)).maybeWarnedAt),
+    ).toBe(true)
 
     await advance(code, DELETE_AFTER_MS - WARN_AFTER_MS)
     expect(Option.isNone(await room(code))).toBe(true)
@@ -99,9 +108,11 @@ describe('lifecycle alarms', () => {
       m => m._tag === 'Snapshot' && m.snapshot._tag === 'Gone',
       'gone snapshot',
     )
-    expect(gone._tag === 'Snapshot' && gone.snapshot._tag === 'Gone' && gone.snapshot.reason).toBe(
-      REASON_IDLE_GAME,
-    )
+    expect(
+      gone._tag === 'Snapshot' &&
+        gone.snapshot._tag === 'Gone' &&
+        gone.snapshot.reason,
+    ).toBe(REASON_IDLE_GAME)
     for (const client of [host, guest]) {
       const entry = (await fetchMenu(client.device)).games[0]!
       expect(entry.status).toBe('Gone')
@@ -114,19 +125,29 @@ describe('lifecycle alarms', () => {
   test('a move resets the clock and clears the warning', async () => {
     const { code, host, guest } = await startFriendGame()
     await advance(code, WARN_AFTER_MS + HOUR)
-    expect(Option.isSome(Option.getOrThrow(await room(code)).maybeWarnedAt)).toBe(true)
+    expect(
+      Option.isSome(Option.getOrThrow(await room(code)).maybeWarnedAt),
+    ).toBe(true)
 
-    const mover = Option.exists(tableView(host.latest()), isViewerTurn) ? host : guest
+    const mover = Option.exists(tableView(host.latest()), isViewerTurn)
+      ? host
+      : guest
     mover.send(ClientMessage.TakeAction({ action: { _tag: 'DrewFromDeck' } }))
     await mover.waitFor(
-      m => m._tag === 'Snapshot' && m.snapshot._tag === 'Table' && m.snapshot.view.turnNumber >= 0 && m.snapshot.view.log.length > 1,
+      m =>
+        m._tag === 'Snapshot' &&
+        m.snapshot._tag === 'Table' &&
+        m.snapshot.view.turnNumber >= 0 &&
+        m.snapshot.view.log.length > 1,
     )
     const touched = Option.getOrThrow(await room(code))
     expect(touched.maybeWarnedAt).toEqual(Option.none())
 
     await advance(code, WARN_AFTER_MS - HOUR)
     expect(Option.isSome(await room(code))).toBe(true)
-    expect(Option.getOrThrow(await room(code)).maybeWarnedAt).toEqual(Option.none())
+    expect(Option.getOrThrow(await room(code)).maybeWarnedAt).toEqual(
+      Option.none(),
+    )
     host.close()
     guest.close()
   })
@@ -140,7 +161,9 @@ describe('lifecycle alarms', () => {
 
     await advance(code, HOUR)
     expect(Option.isNone(await room(code))).toBe(true)
-    expect(Option.getOrThrow(await readTombstone(bindings, code)).reason).toBe(REASON_FINISHED)
+    expect(Option.getOrThrow(await readTombstone(bindings, code)).reason).toBe(
+      REASON_FINISHED,
+    )
     const stats = (await fetchMenu(host.device)).stats
     expect(stats.gamesPlayed).toBe(1)
     host.close()

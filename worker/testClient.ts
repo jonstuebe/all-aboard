@@ -1,6 +1,7 @@
 import { exports as workerExports } from 'cloudflare:workers'
 import { Array, Option } from 'effect'
 
+import { ROUTES } from '../src/domain/board'
 import {
   type ClientView,
   canDrawFromDeck,
@@ -11,7 +12,6 @@ import {
   maybeViewerPayment,
   viewerHasAnyMove,
 } from '../src/domain/clientView'
-import { ROUTES } from '../src/domain/board'
 import { PlayerAction } from '../src/domain/game'
 import {
   type ClientMessage,
@@ -55,13 +55,18 @@ export const api = (
     }),
   )
 
-export const createGame = async (device: Device, name: string): Promise<string> => {
+export const createGame = async (
+  device: Device,
+  name: string,
+): Promise<string> => {
   const response = await api(device, '/api/games', {
     method: 'POST',
     body: JSON.stringify({ name }),
   })
   if (response.status !== 201) {
-    throw new Error(`create failed: ${response.status} ${await response.text()}`)
+    throw new Error(
+      `create failed: ${response.status} ${await response.text()}`,
+    )
   }
   const body: { code: string } = await response.json()
   return body.code
@@ -79,7 +84,10 @@ export type TestClient = Readonly<{
   close: () => void
 }>
 
-export const connect = async (device: Device, code: string): Promise<TestClient> => {
+export const connect = async (
+  device: Device,
+  code: string,
+): Promise<TestClient> => {
   const response = await worker.fetch(
     new Request(
       `http://local/api/games/${code}/ws?device=${device.deviceId}&secret=${device.secret}`,
@@ -176,11 +184,16 @@ export const tableView = (snapshot: GameSnapshot): Option.Option<ClientView> =>
 
 // NOTE: A simple greedy player that only uses what its own ClientView shows.
 export const chooseAction = (view: ClientView): PlayerAction => {
-  const step = Option.getOrElse(maybeTurnStep(view), () => 'ChoosingAction' as const)
+  const step = Option.getOrElse(
+    maybeTurnStep(view),
+    () => 'ChoosingAction' as const,
+  )
   const slots = Array.range(0, 4)
-  const maybeSlot = Array.findFirst(slots, slot =>
-    canTakeMarketCard(view, slot, step) &&
-    !Option.contains(marketCardAt(view, slot), 'Wild'),
+  const maybeSlot = Array.findFirst(
+    slots,
+    slot =>
+      canTakeMarketCard(view, slot, step) &&
+      !Option.contains(marketCardAt(view, slot), 'Wild'),
   )
   if (step === 'DrawingSecondCard') {
     return canDrawFromDeck(view)
@@ -219,9 +232,7 @@ export const fetchMenu = async (device: Device): Promise<Menu> => {
 export const startFriendGame = async (
   hostName = 'Ada',
   guestName = 'Bea',
-): Promise<
-  Readonly<{ code: string; host: TestClient; guest: TestClient }>
-> => {
+): Promise<Readonly<{ code: string; host: TestClient; guest: TestClient }>> => {
   const hostDevice = makeDevice('host')
   const code = await createGame(hostDevice, hostName)
   const host = await connect(hostDevice, code)

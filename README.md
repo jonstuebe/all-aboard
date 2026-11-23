@@ -39,15 +39,15 @@ Keyboard: `D` draws from the deck, `1` to `5` take a market card, `T` takes a ti
 
 ## Code map
 
-| File | Role |
-| --- | --- |
-| `src/model.ts` | Model schema: players, deck, market, claims, phase (`Dealing`, `Playing`, `GameOver`) |
-| `src/message.ts` | Every Message the app reacts to |
-| `src/main.ts` | `init`, `update`, Commands (`RollSeed`, `WaitForBot`), Subscriptions (keyboard shortcuts) |
-| `src/domain/board.ts` | Cities, routes, tickets, deck composition |
-| `src/domain/game.ts` | Pure rules: drawing, paying for and claiming routes, tickets, turn order, final round, scoring |
-| `src/domain/bot.ts` | Bot strategy: shortest paths for its tickets, then claim or draw what it needs |
-| `src/domain/rng.ts` | Seeded PRNG, so `update` stays pure. The seed comes from a Command. |
-| `src/view.ts`, `src/styles.css` | SVG board and the panels around it |
+| File                            | Role                                                                                           |
+| ------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `src/model.ts`                  | Model schema: players, deck, market, claims, phase (`Dealing`, `Playing`, `GameOver`)          |
+| `src/message.ts`                | Every Message the app reacts to                                                                |
+| `src/main.ts`                   | `init`, `update`, Commands (`RollSeed`, `WaitForBot`), Subscriptions (keyboard shortcuts)      |
+| `src/domain/board.ts`           | Cities, routes, tickets, deck composition                                                      |
+| `src/domain/game.ts`            | Pure rules: drawing, paying for and claiming routes, tickets, turn order, final round, scoring |
+| `src/domain/bot.ts`             | Bot strategy: shortest paths for its tickets, then claim or draw what it needs                 |
+| `src/domain/rng.ts`             | Seeded PRNG, so `update` stays pure. The seed comes from a Command.                            |
+| `src/view.ts`, `src/styles.css` | SVG board and the panels around it                                                             |
 
 Bots go through the same `applyAction` as the human player. When a bot's turn starts, `update` returns a `WaitForBot` Command. Its result Message triggers the bot's move, which is checked against the game, turn and step so a stale timer can't act.

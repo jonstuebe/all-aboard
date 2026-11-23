@@ -1,16 +1,19 @@
 import { Array, Option } from 'effect'
 import { describe, expect, test } from 'vitest'
 
+import type { Model } from '../model'
 import { playBotStep } from './bot'
 import { localSeats, maybeTurnStep, newGame } from './game'
 import { addResult, emptyStats, longestRoute, seatResult } from './results'
-import type { Model } from '../model'
 
 const withClaims = (
   claims: ReadonlyArray<readonly [string, number]>,
 ): Model => ({
   ...newGame(3, localSeats('You', 2)),
-  claims: Array.map(claims, ([routeId, playerIndex]) => ({ routeId, playerIndex })),
+  claims: Array.map(claims, ([routeId, playerIndex]) => ({
+    routeId,
+    playerIndex,
+  })),
 })
 
 const playOut = (seed: number): Model => {
@@ -21,7 +24,10 @@ const playOut = (seed: number): Model => {
   return step(
     newGame(
       seed,
-      Array.map(localSeats('You', 3), seat => ({ ...seat, kind: 'Bot' as const })),
+      Array.map(localSeats('You', 3), seat => ({
+        ...seat,
+        kind: 'Bot' as const,
+      })),
     ),
     0,
   )
@@ -44,7 +50,16 @@ describe('longest route', () => {
 
   test('a loop can be walked all the way round', () => {
     // Seattle-Helena (2), Helena-Denver (2), Denver-Seattle (3) = 7.
-    expect(longestRoute(withClaims([['r1', 0], ['r5', 0], ['r2', 0]]), 0)).toBe(7)
+    expect(
+      longestRoute(
+        withClaims([
+          ['r1', 0],
+          ['r5', 0],
+          ['r2', 0],
+        ]),
+        0,
+      ),
+    ).toBe(7)
   })
 
   test('no routes means zero', () => {
@@ -54,9 +69,13 @@ describe('longest route', () => {
 
 describe('seat results', () => {
   test('only a finished game has results, and exactly the top score wins', () => {
-    expect(Option.isNone(seatResult(newGame(1, localSeats('You', 3)), 0))).toBe(true)
+    expect(Option.isNone(seatResult(newGame(1, localSeats('You', 3)), 0))).toBe(
+      true,
+    )
     const final = playOut(21)
-    const results = Array.getSomes(Array.map([0, 1, 2], seat => seatResult(final, seat)))
+    const results = Array.getSomes(
+      Array.map([0, 1, 2], seat => seatResult(final, seat)),
+    )
     expect(results).toHaveLength(3)
     const best = Math.max(...Array.map(results, result => result.score))
     Array.forEach(results, result => {
@@ -76,7 +95,14 @@ describe('seat results', () => {
         longestRoute: 6,
         ticketsCompleted: 2,
       }),
-      { score: 10, rank: 2, isWinner: false, seatCount: 2, longestRoute: 4, ticketsCompleted: 1 },
+      {
+        score: 10,
+        rank: 2,
+        isWinner: false,
+        seatCount: 2,
+        longestRoute: 4,
+        ticketsCompleted: 1,
+      },
     )
     expect(stats).toEqual({
       gamesPlayed: 2,

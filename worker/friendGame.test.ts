@@ -71,7 +71,10 @@ describe('a friend game over WebSocket', () => {
     expect(guestLobby._tag === 'Lobby' && guestLobby.isViewerSeated).toBe(false)
 
     guest.send(ClientMessage.JoinLobby({ name: 'Bea', tone: 0 }))
-    const taken = await guest.waitFor(m => m._tag === 'Rejected', 'tone rejection')
+    const taken = await guest.waitFor(
+      m => m._tag === 'Rejected',
+      'tone rejection',
+    )
     expect(taken._tag === 'Rejected' && taken.reason).toContain('colour')
 
     guest.send(ClientMessage.JoinLobby({ name: '  Bea  ', tone: 1 }))
@@ -83,10 +86,9 @@ describe('a friend game over WebSocket', () => {
       'host sees guest',
     )
     const lobby = guest.latest()
-    expect(lobby._tag === 'Lobby' && Array.map(lobby.seats, s => s.name)).toEqual([
-      'Ada',
-      'Bea',
-    ])
+    expect(
+      lobby._tag === 'Lobby' && Array.map(lobby.seats, s => s.name),
+    ).toEqual(['Ada', 'Bea'])
 
     guest.send(ClientMessage.StartGame())
     const notHost = await guest.waitFor(
@@ -96,12 +98,20 @@ describe('a friend game over WebSocket', () => {
     expect(notHost._tag).toBe('Rejected')
 
     host.send(ClientMessage.StartGame())
-    await host.waitFor(m => m._tag === 'Snapshot' && isTable(m.snapshot), 'host table')
-    await guest.waitFor(m => m._tag === 'Snapshot' && isTable(m.snapshot), 'guest table')
+    await host.waitFor(
+      m => m._tag === 'Snapshot' && isTable(m.snapshot),
+      'host table',
+    )
+    await guest.waitFor(
+      m => m._tag === 'Snapshot' && isTable(m.snapshot),
+      'guest table',
+    )
 
     const latecomer = await connect(makeDevice('late'), code)
     const closed = latecomer.latest()
-    expect(closed._tag === 'Closed' && closed.reason).toBe('This game already started.')
+    expect(closed._tag === 'Closed' && closed.reason).toBe(
+      'This game already started.',
+    )
     latecomer.close()
 
     const hostView = Option.getOrThrow(tableView(host.latest()))
@@ -112,7 +122,9 @@ describe('a friend game over WebSocket', () => {
     expect(JSON.stringify(host.messages)).not.toContain('rngState')
 
     const [waiting] = isViewerTurn(hostView) ? [guest] : [host]
-    waiting!.send(ClientMessage.TakeAction({ action: PlayerAction.DrewFromDeck() }))
+    waiting!.send(
+      ClientMessage.TakeAction({ action: PlayerAction.DrewFromDeck() }),
+    )
     const outOfTurn = await waiting!.waitFor(
       m => m._tag === 'Rejected' && m.reason.includes('not your turn'),
       'out-of-turn rejection',
@@ -140,13 +152,18 @@ describe('a friend game over WebSocket', () => {
     const guest = await connect(makeDevice('guest'), code)
     guest.send(ClientMessage.JoinLobby({ name: 'Bea', tone: 2 }))
     await host.waitFor(
-      m => m._tag === 'Snapshot' && m.snapshot._tag === 'Lobby' && m.snapshot.seats.length === 2,
+      m =>
+        m._tag === 'Snapshot' &&
+        m.snapshot._tag === 'Lobby' &&
+        m.snapshot.seats.length === 2,
     )
     host.send(ClientMessage.StartGame())
     await host.waitFor(m => m._tag === 'Snapshot' && isTable(m.snapshot))
 
     const stranger = await connect(makeDevice('stranger'), code)
-    stranger.send(ClientMessage.TakeAction({ action: PlayerAction.DrewFromDeck() }))
+    stranger.send(
+      ClientMessage.TakeAction({ action: PlayerAction.DrewFromDeck() }),
+    )
     const rejected = await stranger.waitFor(m => m._tag === 'Rejected')
     expect(rejected._tag === 'Rejected' && rejected.reason).toContain('seat')
 
@@ -157,7 +174,11 @@ describe('a friend game over WebSocket', () => {
     expect(wrongSecret.status).toBe(401)
 
     const garbage = nextMessage(host)
-    host.send(ClientMessage.TakeAction({ action: PlayerAction.TookMarketCard({ slot: 99 }) }))
+    host.send(
+      ClientMessage.TakeAction({
+        action: PlayerAction.TookMarketCard({ slot: 99 }),
+      }),
+    )
     expect((await garbage)._tag).toBe('Rejected')
     stranger.close()
     host.close()

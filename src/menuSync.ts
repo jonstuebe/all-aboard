@@ -1,8 +1,9 @@
 import { Effect, Option, Schema } from 'effect'
 import * as SecureRandom from 'effect/crypto/SecureRandom'
-import { BrowserCrypto } from '@effect/platform-browser'
 import { Command } from 'foldkit'
 import { defineTaggedUnion } from 'foldkit/schema'
+
+import { BrowserCrypto } from '@effect/platform-browser'
 
 import { Device, authHeaders } from './device'
 import { SeatResult } from './domain/results'
@@ -23,14 +24,19 @@ export type MenuState = typeof MenuState.Type
 const QUEUE_KEY = 'allAboard.pendingResults'
 
 const PendingResults = Schema.Array(LocalResult)
-const PendingResultsJson = Schema.fromJsonString(Schema.toCodecJson(PendingResults))
+const PendingResultsJson = Schema.fromJsonString(
+  Schema.toCodecJson(PendingResults),
+)
 const decodePending = Schema.decodeUnknownOption(PendingResultsJson)
 const encodePending = Schema.encodeSync(PendingResultsJson)
 
 const readPending = Effect.sync((): ReadonlyArray<LocalResult> => {
   try {
     return Option.getOrElse(
-      Option.flatMap(Option.fromNullishOr(localStorage.getItem(QUEUE_KEY)), decodePending),
+      Option.flatMap(
+        Option.fromNullishOr(localStorage.getItem(QUEUE_KEY)),
+        decodePending,
+      ),
       () => [],
     )
   } catch {
@@ -56,9 +62,9 @@ export const QueueLocalResult = Command.define('QueueLocalResult', {
   messages: [Message.CompletedQueueLocalResult],
   execute: ({ result }) =>
     Effect.gen(function* () {
-      const id = yield* SecureRandom.SecureRandom.use(random => random.uuidV4()).pipe(
-        Effect.provide(BrowserCrypto.layerSecureRandom),
-      )
+      const id = yield* SecureRandom.SecureRandom.use(random =>
+        random.uuidV4(),
+      ).pipe(Effect.provide(BrowserCrypto.layerSecureRandom))
       const pending = yield* readPending
       yield* writePending([...pending, { id: `local-${id}`, result }])
       return Message.CompletedQueueLocalResult()

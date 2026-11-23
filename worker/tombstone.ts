@@ -30,5 +30,8 @@ export const writeTombstone = async (
   code: string,
   tombstone: Tombstone,
 ): Promise<void> => {
-  await env.TOMBSTONES.put(key(code), Schema.encodeSync(TombstoneJson)(tombstone))
+  await env.TOMBSTONES.put(
+    key(code),
+    Schema.encodeSync(TombstoneJson)(tombstone),
+  )
 }

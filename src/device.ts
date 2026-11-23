@@ -1,5 +1,6 @@
 import { Effect, Option, Schema } from 'effect'
 import * as SecureRandom from 'effect/crypto/SecureRandom'
+
 import { BrowserCrypto } from '@effect/platform-browser'
 
 import { DEVICE_ID_HEADER, DEVICE_SECRET_HEADER } from './protocol'
@@ -60,7 +61,10 @@ const makeDevice: Effect.Effect<Device> = Effect.gen(function* () {
 // private windows) the device lasts for this page load only.
 export const loadDevice: Effect.Effect<Device> = Effect.suspend(() =>
   Option.match(
-    Option.flatMap(readStorage(DEVICE_KEY), Schema.decodeUnknownOption(DeviceJson)),
+    Option.flatMap(
+      readStorage(DEVICE_KEY),
+      Schema.decodeUnknownOption(DeviceJson),
+    ),
     { onSome: Effect.succeed, onNone: () => makeDevice },
   ),
 )

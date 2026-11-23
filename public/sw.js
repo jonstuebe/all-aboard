@@ -20,7 +20,11 @@ self.addEventListener('activate', event => {
   event.waitUntil(
     caches
       .keys()
-      .then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key))))
+      .then(keys =>
+        Promise.all(
+          keys.filter(key => key !== CACHE).map(key => caches.delete(key)),
+        ),
+      )
       .then(() => self.clients.claim()),
   )
 })
@@ -87,14 +91,23 @@ self.addEventListener('push', event => {
 
 self.addEventListener('notificationclick', event => {
   event.notification.close()
-  const target = new URL(event.notification.data?.url ?? '/', self.location.origin).href
+  const target = new URL(
+    event.notification.data?.url ?? '/',
+    self.location.origin,
+  ).href
   event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windows => {
-      const open = windows.find(client => client.url === target) ?? windows[0]
-      if (open) {
-        return open.focus().then(client => (client.url === target ? client : client.navigate(target)))
-      }
-      return self.clients.openWindow(target)
-    }),
+    self.clients
+      .matchAll({ type: 'window', includeUncontrolled: true })
+      .then(windows => {
+        const open = windows.find(client => client.url === target) ?? windows[0]
+        if (open) {
+          return open
+            .focus()
+            .then(client =>
+              client.url === target ? client : client.navigate(target),
+            )
+        }
+        return self.clients.openWindow(target)
+      }),
   )
 })

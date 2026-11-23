@@ -139,7 +139,9 @@ export const Menu = Schema.Struct({
 })
 export type Menu = typeof Menu.Type
 
-export const MenuEntryJson = Schema.fromJsonString(Schema.toCodecJson(MenuEntry))
+export const MenuEntryJson = Schema.fromJsonString(
+  Schema.toCodecJson(MenuEntry),
+)
 export const encodeMenuEntry = Schema.encodeSync(MenuEntryJson)
 export const decodeMenuEntry = Schema.decodeUnknownOption(MenuEntryJson)
 
@@ -160,7 +162,9 @@ export const LocalResultsRequest = Schema.Struct({
 })
 export type LocalResultsRequest = typeof LocalResultsRequest.Type
 
-export const SeatResultJson = Schema.fromJsonString(Schema.toCodecJson(SeatResult))
+export const SeatResultJson = Schema.fromJsonString(
+  Schema.toCodecJson(SeatResult),
+)
 export const encodeSeatResult = Schema.encodeSync(SeatResultJson)
 export const decodeSeatResult = Schema.decodeUnknownOption(SeatResultJson)
 

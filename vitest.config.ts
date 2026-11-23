@@ -6,7 +6,8 @@ import { cloudflareTest } from '@cloudflare/vitest-plugin'
 import { generateVapidKeys } from './scripts/vapid.mjs'
 
 // NOTE: Tests get a throwaway VAPID key pair on every run, never one on disk.
-const vapid: { publicKey: string; privateKey: string } = await generateVapidKeys()
+const vapid: { publicKey: string; privateKey: string } =
+  await generateVapidKeys()
 
 export default defineConfig({
   test: {

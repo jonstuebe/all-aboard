@@ -28,7 +28,9 @@ describe('PlayerDO menu and stats', () => {
     const { code, host, guest } = await startFriendGame()
 
     const hostView = Option.getOrThrow(tableView(host.latest()))
-    const [mover, waiter] = isViewerTurn(hostView) ? [host, guest] : [guest, host]
+    const [mover, waiter] = isViewerTurn(hostView)
+      ? [host, guest]
+      : [guest, host]
     const moverMenu = await fetchMenu(mover.device)
     const waiterMenu = await fetchMenu(waiter.device)
     expect(Array.map(moverMenu.games, g => [g.code, g.status])).toEqual([
@@ -63,14 +65,20 @@ describe('PlayerDO menu and stats', () => {
     const guest = await connect(guestDevice, code)
     guest.send(ClientMessage.JoinLobby({ name: 'Bea', tone: 3 }))
     await guest.waitFor(
-      m => m._tag === 'Snapshot' && m.snapshot._tag === 'Lobby' && m.snapshot.isViewerSeated,
+      m =>
+        m._tag === 'Snapshot' &&
+        m.snapshot._tag === 'Lobby' &&
+        m.snapshot.isViewerSeated,
     )
     expect((await fetchMenu(hostDevice)).games[0]!.status).toBe('Lobby')
     expect((await fetchMenu(guestDevice)).games[0]!.status).toBe('Lobby')
 
     guest.send(ClientMessage.LeaveGame())
     await guest.waitFor(
-      m => m._tag === 'Snapshot' && m.snapshot._tag === 'Lobby' && !m.snapshot.isViewerSeated,
+      m =>
+        m._tag === 'Snapshot' &&
+        m.snapshot._tag === 'Lobby' &&
+        !m.snapshot.isViewerSeated,
     )
     expect((await fetchMenu(guestDevice)).games).toEqual([])
     guest.close()
@@ -84,7 +92,16 @@ describe('PlayerDO menu and stats', () => {
         body: JSON.stringify({
           results: [
             { id: 'local-abc123', result: sampleResult },
-            { id: 'local-def456', result: { ...sampleResult, isWinner: false, rank: 2, score: 20, longestRoute: 14 } },
+            {
+              id: 'local-def456',
+              result: {
+                ...sampleResult,
+                isWinner: false,
+                rank: 2,
+                score: 20,
+                longestRoute: 14,
+              },
+            },
           ],
         }),
       })

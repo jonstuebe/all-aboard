@@ -72,12 +72,21 @@ export const longestRoute = (model: Model, seatIndex: number): number => {
       Array.map(
         route =>
           route.length +
-          walk(route.from === city ? route.to : route.from, [...used, route.id]),
+          walk(route.from === city ? route.to : route.from, [
+            ...used,
+            route.id,
+          ]),
       ),
       Array.reduce(0, Number.max),
     )
-  const cities = Array.dedupe(Array.flatMap(owned, route => [route.from, route.to]))
-  return Array.reduce(Array.map(cities, city => walk(city, [])), 0, Number.max)
+  const cities = Array.dedupe(
+    Array.flatMap(owned, route => [route.from, route.to]),
+  )
+  return Array.reduce(
+    Array.map(cities, city => walk(city, [])),
+    0,
+    Number.max,
+  )
 }
 
 export const seatResult = (
@@ -89,7 +98,10 @@ export const seatResult = (
   }
   const ranked = standings(model)
   return pipe(
-    Array.findFirstIndex(ranked, standing => standing.playerIndex === seatIndex),
+    Array.findFirstIndex(
+      ranked,
+      standing => standing.playerIndex === seatIndex,
+    ),
     Option.flatMap(position =>
       Option.map(Array.get(ranked, position), standing => {
         const best = Option.getOrElse(

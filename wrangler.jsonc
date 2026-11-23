@@ -9,21 +9,21 @@
     "directory": "./dist",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": ["/api/*"],
   },
   "durable_objects": {
     "bindings": [
       { "name": "GAMES", "class_name": "GameDO" },
-      { "name": "PLAYERS", "class_name": "PlayerDO" }
-    ]
+      { "name": "PLAYERS", "class_name": "PlayerDO" },
+    ],
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["GameDO", "PlayerDO"] }],
   "kv_namespaces": [{ "binding": "TOMBSTONES", "id": "local-tombstones" }],
   "vars": {
-    "BOT_DELAY_MS": "1500"
+    "BOT_DELAY_MS": "1500",
   },
   "dev": {
     "port": 8790,
-    "ip": "127.0.0.1"
-  }
+    "ip": "127.0.0.1",
+  },
 }

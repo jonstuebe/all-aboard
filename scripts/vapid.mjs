@@ -8,7 +8,9 @@ export const generateVapidKeys = async () => {
     true,
     ['sign', 'verify'],
   )
-  const raw = new Uint8Array(await webcrypto.subtle.exportKey('raw', pair.publicKey))
+  const raw = new Uint8Array(
+    await webcrypto.subtle.exportKey('raw', pair.publicKey),
+  )
   const jwk = await webcrypto.subtle.exportKey('jwk', pair.privateKey)
   return {
     publicKey: Buffer.from(raw).toString('base64url'),
