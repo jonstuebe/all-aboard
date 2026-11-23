@@ -1,5 +1,7 @@
 # Product
 
+> Direction change: the owner rejected the flat transit-map look. The UI is now deliberately skeuomorphic: an engraved paper map of the United States, track with ties and rails, train-car cards, wood, brass, leather and ticket stubs. Where the sections below say otherwise (Brand Personality, the first two Anti-references), this note wins.
+
 ## Register
 
 product

@@ -2,6 +2,15 @@ import { Array, Match, Option, pipe } from 'effect'
 import type { Document, Html, HtmlBuilder } from 'foldkit/html'
 
 import {
+  CARD_BACK_ART,
+  CAR_ART,
+  CAR_KIND,
+  CAR_VIEW_BOX,
+  DEPOT_ART,
+  MAP_ART,
+  routeArt,
+} from './art'
+import {
   CARD_COLORS,
   CITIES,
   type Card,
@@ -41,10 +50,9 @@ import {
 
 const HUMAN_INDEX = 0
 const BOARD_VIEW_BOX = '40 30 920 566'
-const CITY_RADIUS = 14
-const ROUTE_INSET = 28
+const TICKET_RING_RADIUS = 25
+const ROUTE_INSET = 24
 const SLOT_GAP = 6
-const SLOT_THICKNESS = 20
 const LOG_LENGTH = 6
 
 const GLYPHS: Record<RouteColor | 'Wild', string> = {
@@ -66,18 +74,18 @@ type LabelPlacement = Readonly<{
 }>
 
 const LABEL_PLACEMENTS: Record<string, LabelPlacement> = {
-  ironport: { dx: 0, dy: -28, anchor: 'middle' },
-  harlow: { dx: 0, dy: -28, anchor: 'middle' },
-  dunmore: { dx: 0, dy: -28, anchor: 'middle' },
-  fairhaven: { dx: 0, dy: -28, anchor: 'middle' },
-  ashford: { dx: 20, dy: 42, anchor: 'start' },
-  elkridge: { dx: -24, dy: -27, anchor: 'end' },
-  briarbay: { dx: 0, dy: 50, anchor: 'middle' },
-  coldwater: { dx: 0, dy: 44, anchor: 'middle' },
-  granitefalls: { dx: 0, dy: 44, anchor: 'middle' },
+  seattle: { dx: 4, dy: -31, anchor: 'middle' },
+  helena: { dx: 0, dy: -31, anchor: 'middle' },
+  chicago: { dx: 0, dy: -31, anchor: 'middle' },
+  newyork: { dx: 0, dy: -31, anchor: 'middle' },
+  denver: { dx: 12, dy: -36, anchor: 'start' },
+  atlanta: { dx: -6, dy: 50, anchor: 'middle' },
+  losangeles: { dx: 0, dy: 50, anchor: 'middle' },
+  dallas: { dx: 0, dy: 50, anchor: 'middle' },
+  miami: { dx: 27, dy: 9, anchor: 'start' },
 }
 
-const DEFAULT_PLACEMENT: LabelPlacement = { dx: 0, dy: 40, anchor: 'middle' }
+const DEFAULT_PLACEMENT: LabelPlacement = { dx: 0, dy: 48, anchor: 'middle' }
 
 const colorName = (card: Card | RouteColor): string =>
   card === 'Wild' ? 'Wild' : card === 'Gray' ? 'Any color' : card
@@ -91,30 +99,22 @@ const cityPair = (from: string, to: string): string =>
 
 // BOARD
 
-type SlotGeometry = Readonly<{ x: number; y: number }>
-
 const routeGeometry = (route: Route) => {
   const from = cityById(route.from)
   const to = cityById(route.to)
   const deltaX = to.x - from.x
   const deltaY = to.y - from.y
   const distance = Math.hypot(deltaX, deltaY)
-  const unitX = deltaX / distance
-  const unitY = deltaY / distance
   const usable = distance - 2 * ROUTE_INSET
   const slotLength = (usable - SLOT_GAP * (route.length - 1)) / route.length
-  const slots: ReadonlyArray<SlotGeometry> = Array.makeBy(
+  const slotCenters: ReadonlyArray<number> = Array.makeBy(
     route.length,
-    index => {
-      const offset =
-        ROUTE_INSET + slotLength / 2 + index * (slotLength + SLOT_GAP)
-      return { x: from.x + unitX * offset, y: from.y + unitY * offset }
-    },
+    index => ROUTE_INSET + slotLength / 2 + index * (slotLength + SLOT_GAP),
   )
   return {
     from,
     to,
-    slots,
+    slotCenters,
     slotLength,
     angle: (Math.atan2(deltaY, deltaX) * 180) / Math.PI,
   }
@@ -187,30 +187,21 @@ const routeView = (
         h.X2(String(geometry.to.x)),
         h.Y2(String(geometry.to.y)),
       ]),
-      ...Array.map(geometry.slots, slot =>
-        h.g(
-          [h.Transform(`translate(${slot.x.toFixed(1)} ${slot.y.toFixed(1)})`)],
-          [
-            h.rect([
-              h.Class('route-slot'),
-              h.X(String(-geometry.slotLength / 2)),
-              h.Y(String(-SLOT_THICKNESS / 2)),
-              h.Width(String(geometry.slotLength)),
-              h.Height(String(SLOT_THICKNESS)),
-              h.Rx('4'),
-              h.Transform(`rotate(${geometry.angle.toFixed(1)})`),
-            ]),
-            h.text(
-              [
-                h.Class('route-mark'),
-                h.TextAnchor('middle'),
-                h.DominantBaseline('central'),
-              ],
-              [slotMark],
-            ),
-          ],
+      h.g([
+        h.Class('route-art'),
+        h.Transform(
+          `translate(${geometry.from.x} ${geometry.from.y}) rotate(${geometry.angle.toFixed(1)})`,
         ),
-      ),
+        h.InnerHTML(
+          routeArt({
+            slotCenters: geometry.slotCenters,
+            slotLength: geometry.slotLength,
+            angle: geometry.angle,
+            mark: slotMark,
+            isOwned: Option.isSome(maybeOwner),
+          }),
+        ),
+      ]),
     ],
   )
 }
@@ -255,14 +246,13 @@ const cityView = (model: Model, city: City, h: HtmlBuilder<Message>): Html => {
             h.Class(className),
             h.Cx(String(city.x)),
             h.Cy(String(city.y)),
-            h.R(String(CITY_RADIUS + 8)),
+            h.R(String(TICKET_RING_RADIUS)),
           ]),
       }),
-      h.circle([
-        h.Class('city-dot'),
-        h.Cx(String(city.x)),
-        h.Cy(String(city.y)),
-        h.R(String(CITY_RADIUS)),
+      h.g([
+        h.Class('depot'),
+        h.Transform(`translate(${city.x} ${city.y})`),
+        h.InnerHTML(DEPOT_ART),
       ]),
       h.text(
         [
@@ -289,6 +279,7 @@ const boardView = (model: Model, h: HtmlBuilder<Message>): Html =>
           h.AriaLabel('Rail map. Choose a route to claim it.'),
         ],
         [
+          h.g([h.Class('map-art'), h.AriaHidden(true), h.InnerHTML(MAP_ART)]),
           h.g(
             [h.Class('routes')],
             Array.map(ROUTES, route => routeView(model, route, h)),
@@ -310,8 +301,8 @@ const routeReadoutView = (model: Model, h: HtmlBuilder<Message>): Html =>
         [h.Class('readout is-hint')],
         [
           isHumanTurn(model)
-            ? 'Routes glowing orange are ones you can claim right now. Tap one to claim it.'
-            : 'Watch the board: each claimed route fills with its owner’s color.',
+            ? 'Track glowing gold is a route you can claim right now. Tap it to couple your train.'
+            : 'Watch the map: each claimed route fills with its owner’s train.',
         ],
       ),
     onSome: routeId => {
@@ -368,8 +359,9 @@ const headerView = (model: Model, h: HtmlBuilder<Message>): Html =>
       h.div(
         [h.Class('brand')],
         [
-          h.span([h.Class('brand-mark'), h.AriaHidden(true)]),
+          h.span([h.Class('rivet'), h.AriaHidden(true)]),
           h.h1([h.Class('brand-name')], ['All Aboard']),
+          h.span([h.Class('rivet'), h.AriaHidden(true)]),
         ],
       ),
       h.p(
@@ -453,9 +445,24 @@ const scoreboardView = (model: Model, h: HtmlBuilder<Message>): Html =>
 
 // CARDS
 
+const carArt = (card: Card, h: HtmlBuilder<Message>): Html =>
+  h.svg([
+    h.Class('car-art'),
+    h.ViewBox(CAR_VIEW_BOX),
+    h.AriaHidden(true),
+    h.InnerHTML(CAR_ART[card]),
+  ])
+
 const cardFace = (card: Card, h: HtmlBuilder<Message>): ReadonlyArray<Html> => [
   h.span([h.Class('card-glyph'), h.AriaHidden(true)], [GLYPHS[card]]),
-  h.span([h.Class('card-name')], [colorName(card)]),
+  carArt(card, h),
+  h.span(
+    [h.Class('card-name')],
+    [
+      colorName(card),
+      h.span([h.Class('card-kind'), h.AriaHidden(true)], [CAR_KIND[card]]),
+    ],
+  ),
 ]
 
 const marketView = (model: Model, h: HtmlBuilder<Message>): Html => {
@@ -469,7 +476,7 @@ const marketView = (model: Model, h: HtmlBuilder<Message>): Html => {
   const slots = Array.map(Array.range(0, MARKET_SIZE - 1), slot =>
     Option.match(marketCardAt(model, slot), {
       onNone: () =>
-        h.keyed('li')(`slot-${slot}`, [h.Class('card is-empty')], ['—']),
+        h.keyed('li')(`slot-${slot}`, [h.Class('card is-empty')], ['Sold out']),
       onSome: card => {
         const isAvailable = canAct && canTakeMarketCard(model, slot, step)
         return h.keyed('li')(
@@ -532,8 +539,23 @@ const marketView = (model: Model, h: HtmlBuilder<Message>): Html => {
                   h.OnClick(Message.ClickedDeck()),
                 ],
                 [
-                  h.span([h.Class('card-glyph'), h.AriaHidden(true)], ['⇣']),
-                  h.span([h.Class('card-name')], ['Deck']),
+                  h.svg([
+                    h.Class('card-back'),
+                    h.ViewBox(CAR_VIEW_BOX),
+                    h.Attribute('preserveAspectRatio', 'xMidYMid slice'),
+                    h.AriaHidden(true),
+                    h.InnerHTML(CARD_BACK_ART),
+                  ]),
+                  h.span(
+                    [h.Class('card-name')],
+                    [
+                      'Deck',
+                      h.span(
+                        [h.Class('card-kind'), h.AriaHidden(true)],
+                        [`${model.deck.length} cards`],
+                      ),
+                    ],
+                  ),
                   h.kbd([h.Class('card-key'), h.AriaHidden(true)], ['D']),
                 ],
               ),
@@ -571,18 +593,15 @@ const handView = (
             card,
             [
               h.Class(
-                `hand-card color-${card.toLowerCase()}${count === 0 ? ' is-zero' : ''}`,
+                `card hand-card color-${card.toLowerCase()}${count === 0 ? ' is-zero' : ''}`,
               ),
               h.AriaLabel(`${count} ${colorName(card)}`),
             ],
             [
-              h.span(
-                [h.Class('card-glyph'), h.AriaHidden(true)],
-                [GLYPHS[card]],
-              ),
+              ...cardFace(card, h),
               h.span(
                 [h.Class('hand-count'), h.AriaHidden(true)],
-                [String(count)],
+                [`×${count}`],
               ),
             ],
           )
@@ -631,20 +650,36 @@ const ticketsView = (
             [h.Class(`ticket${isComplete ? ' is-done' : ''}`)],
             [
               h.span(
-                [h.Class('ticket-route')],
+                [h.Class('ticket-main')],
                 [
-                  cityById(ticket.from).name,
                   h.span(
-                    [h.Class('ticket-arrow'), h.AriaHidden(true)],
-                    [' → '],
+                    [h.Class('ticket-kicker'), h.AriaHidden(true)],
+                    ['Destination ticket'],
                   ),
-                  cityById(ticket.to).name,
+                  h.span(
+                    [h.Class('ticket-route')],
+                    [
+                      cityById(ticket.from).name,
+                      h.span(
+                        [h.Class('ticket-arrow'), h.AriaHidden(true)],
+                        [' ⟶ '],
+                      ),
+                      h.span([h.Class('sr-only')], [' to ']),
+                      cityById(ticket.to).name,
+                    ],
+                  ),
+                  h.span(
+                    [h.Class('ticket-state')],
+                    [isComplete ? '✓ Connected' : 'Not yet connected'],
+                  ),
                 ],
               ),
-              h.span([h.Class('ticket-points')], [`${ticket.points}`]),
               h.span(
-                [h.Class('ticket-state')],
-                [isComplete ? '✓ Connected' : 'Open'],
+                [h.Class('ticket-stub')],
+                [
+                  h.span([h.Class('ticket-points')], [`${ticket.points}`]),
+                  h.span([h.Class('ticket-unit')], ['points']),
+                ],
               ),
             ],
           )
@@ -700,6 +735,7 @@ const resultsView = (
   return h.section(
     [h.Class('panel results'), h.AriaLabelledBy('results-title')],
     [
+      h.p([h.Class('results-kicker')], ['End of the line · Final standings']),
       h.h2([h.Id('results-title'), h.Class('results-headline')], [headline]),
       h.table(
         [h.Class('results-table')],
@@ -720,11 +756,15 @@ const resultsView = (
           ),
           h.tbody(
             [],
-            Array.map(standings, standing => {
+            Array.map(standings, (standing, rank) => {
               const player = model.players[standing.playerIndex]
               return h.keyed('tr')(
                 standing.playerIndex,
-                [h.Class(playerTone(standing.playerIndex))],
+                [
+                  h.Class(
+                    `${playerTone(standing.playerIndex)}${rank === 0 ? ' is-winner' : ''}`,
+                  ),
+                ],
                 [
                   h.th(
                     [h.Scope('row')],
