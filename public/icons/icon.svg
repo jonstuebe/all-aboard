@@ -1,20 +1,47 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" fill="#2a1a10"/>
-  <circle cx="256" cy="256" r="196" fill="#3b2414" stroke="#cda54c" stroke-width="18"/>
-  <circle cx="256" cy="256" r="168" fill="none" stroke="#7c5a1b" stroke-width="4"/>
-  <g fill="#f3dc92">
-    <rect x="150" y="236" width="170" height="70" rx="8"/>
-    <rect x="300" y="196" width="64" height="110" rx="6"/>
-    <rect x="290" y="184" width="84" height="18" rx="4"/>
-    <rect x="176" y="190" width="26" height="46" rx="4"/>
-    <rect x="166" y="180" width="46" height="14" rx="4"/>
-    <path d="M150 306 L120 340 L160 340 Z"/>
-    <rect x="312" y="212" width="40" height="34" rx="3" fill="#3b2414"/>
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="40%" r="75%">
+      <stop offset="0" stop-color="#4a2e1a"/><stop offset="1" stop-color="#22140b"/>
+    </radialGradient>
+    <linearGradient id="brass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f1d27a"/><stop offset=".5" stop-color="#c99a3d"/><stop offset="1" stop-color="#8a6420"/>
+    </linearGradient>
+    <radialGradient id="face" cx="50%" cy="38%" r="70%">
+      <stop offset="0" stop-color="#b8322a"/><stop offset="1" stop-color="#6e1712"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <g transform="translate(256 256) scale(1) translate(-256 -256)">
+    <circle cx="256" cy="256" r="214" fill="#1a0f08" opacity=".45"/>
+    <circle cx="256" cy="252" r="206" fill="url(#brass)"/>
+    <circle cx="256" cy="252" r="184" fill="url(#face)" stroke="#5a3e12" stroke-width="5"/>
+    <circle cx="256" cy="252" r="170" fill="none" stroke="#f1d27a" stroke-width="3" opacity=".55"/>
+    <g fill="#f6e7bf">
+      <!-- smokestack -->
+      <path d="M176 232 L182 190 L164 172 L216 172 L198 190 L204 232 Z"/>
+      <!-- boiler -->
+      <rect x="150" y="226" width="176" height="66" rx="22"/>
+      <!-- dome + sand box -->
+      <path d="M236 228 a22 24 0 0 1 44 0 Z"/>
+      <!-- headlamp -->
+      <rect x="140" y="236" width="16" height="26" rx="4"/>
+      <!-- cab -->
+      <rect x="312" y="190" width="62" height="102" rx="4"/>
+      <rect x="302" y="176" width="82" height="18" rx="5"/>
+      <!-- frame -->
+      <rect x="136" y="288" width="246" height="14" rx="3"/>
+      <!-- cowcatcher -->
+      <path d="M150 302 L112 340 L170 340 L170 302 Z"/>
+    </g>
+    <rect x="324" y="204" width="38" height="34" rx="4" fill="#8f2219"/>
+    <g stroke="#8f2219" stroke-width="5">
+      <line x1="152" y1="310" x2="138" y2="338"/><line x1="164" y1="310" x2="158" y2="338"/>
+    </g>
+    <g fill="#f1d27a" stroke="#6e1712" stroke-width="6">
+      <circle cx="218" cy="326" r="32"/><circle cx="290" cy="326" r="32"/><circle cx="352" cy="336" r="22"/>
+    </g>
+    <g fill="#6e1712"><circle cx="218" cy="326" r="9"/><circle cx="290" cy="326" r="9"/><circle cx="352" cy="336" r="7"/></g>
+    <rect x="200" y="320" width="108" height="10" rx="5" fill="#6e1712"/>
+    <rect x="110" y="360" width="292" height="10" rx="5" fill="#f1d27a"/>
   </g>
-  <g fill="#cda54c" stroke="#2a1a10" stroke-width="6">
-    <circle cx="196" cy="330" r="28"/>
-    <circle cx="262" cy="330" r="28"/>
-    <circle cx="334" cy="330" r="24"/>
-  </g>
-  <rect x="120" y="360" width="272" height="10" rx="5" fill="#cda54c"/>
 </svg>

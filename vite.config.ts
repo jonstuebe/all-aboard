@@ -1,10 +1,18 @@
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 
 import { foldkit } from '@foldkit/vite-plugin'
 import tailwindcss from '@tailwindcss/vite'
 
+// NOTE: Link previews need absolute URLs. Set SITE_URL (no trailing slash) for
+// a public build; without it the share tags fall back to root-relative paths.
+const siteUrl = (): Plugin => ({
+  name: 'site-url',
+  transformIndexHtml: html =>
+    html.replaceAll('%SITE_URL%', (process.env.SITE_URL ?? '').replace(/\/$/, '')),
+})
+
 export default defineConfig({
-  plugins: [tailwindcss(), foldkit()],
+  plugins: [tailwindcss(), foldkit(), siteUrl()],
   optimizeDeps: {
     entries: ['src/entry.ts'],
   },
