@@ -143,17 +143,21 @@ const statTile = (
     ],
   )
 
+// NOTE: No card at all until a game has finished; an empty record says nothing.
 const statsCard = (stats: Stats, h: HtmlBuilder<Message>): Html =>
-  h.section(
-    [h.Class('panel menu-card menu-stats'), h.AriaLabelledBy('stats-title')],
-    [
-      h.h2(
-        [h.Id('stats-title'), h.Class('menu-subheading is-first')],
-        ['Stats'],
-      ),
-      stats.gamesPlayed === 0
-        ? h.p([h.Class('menu-detail')], ['Finish a game to start your record.'])
-        : h.dl(
+  stats.gamesPlayed === 0
+    ? h.empty
+    : h.section(
+        [
+          h.Class('panel menu-card menu-stats'),
+          h.AriaLabelledBy('stats-title'),
+        ],
+        [
+          h.h2(
+            [h.Id('stats-title'), h.Class('menu-subheading is-first')],
+            ['Stats'],
+          ),
+          h.dl(
             [h.Class('stat-grid')],
             [
               statTile('Games played', String(stats.gamesPlayed), h),
@@ -168,8 +172,8 @@ const statsCard = (stats: Stats, h: HtmlBuilder<Message>): Html =>
               statTile('Tickets completed', String(stats.ticketsCompleted), h),
             ],
           ),
-    ],
-  )
+        ],
+      )
 
 const loadedView = (
   menu: Menu,

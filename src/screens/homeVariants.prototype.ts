@@ -335,7 +335,6 @@ const variantH = (props: VariantProps, h: H): Html => {
       h.section(
         [h.Class('hv-b-ticket hv-h-hero'), h.AriaLabel('New game')],
         [
-          band(h, 'No. 0001'),
           h.div(
             [h.Class('hv-b-body')],
             [
