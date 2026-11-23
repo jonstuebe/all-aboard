@@ -5,13 +5,25 @@ A small train route-building game built with [Foldkit](https://foldkit.dev): Elm
 ## Run it
 
 ```bash
-npm install
-npm run dev
+bun install
+bun run dev
 ```
 
 Then open http://localhost:5188. The dev server listens on every network interface and accepts `*.ts.net` hostnames, so it's also reachable at `http://<your-machine>.<tailnet>.ts.net:5188` over Tailscale.
 
-Other scripts: `npm test` (Vitest), `npm run typecheck`, `npm run lint`, `npm run build`.
+Other scripts: `bun run test` (Vitest), `bun run typecheck`, `bun run lint`, `bun run build`.
+
+### Playing with friends (local multiplayer)
+
+Friend games run against a local Cloudflare Worker (`worker/`). Nothing is deployed.
+
+```bash
+bun run dev:vars        # once: writes local Web Push keys to .dev.vars (gitignored)
+bun run dev:worker      # wrangler dev on 127.0.0.1:8790
+PORT=5199 bun run dev   # Vite; proxies /api and the game WebSocket to the worker
+```
+
+Open the app in two browser profiles: start a game with friends in one and join with its invite code in the other. Games with only bots still run entirely on the device and work offline. The design and build notes are in `docs/multiplayer-plan.md`.
 
 ## How to play
 

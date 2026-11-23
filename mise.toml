@@ -1,0 +1,4 @@
+[tools]
+bun = "1.4.5"
+# Vite, Vitest and the Foldkit tooling still run on Node; Bun is the package manager and script runner.
+node = "26.12.1"

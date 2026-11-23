@@ -11,7 +11,7 @@
     "format": "oxfmt",
     "test": "vitest run",
     "lint": "oxlint src && effect-tsgo patch --no-typescript --oxlint && oxlint --config .oxlintrc.effect.json --deny-warnings src",
-    "dev:vars": "node scripts/generate-dev-vars.mjs"
+    "dev:vars": "bun scripts/generate-dev-vars.mjs"
   },
   "dependencies": {
     "@effect/platform-browser": "4.1.0",
