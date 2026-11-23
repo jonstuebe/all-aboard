@@ -297,3 +297,118 @@
 .join-lobby > .field {
   flex: none;
 }
+
+/* MENU LISTS */
+
+.menu-subheading.is-first {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-size: 1.125rem;
+  color: #3a2415;
+}
+
+.menu-status {
+  width: min(100%, 520px);
+  margin: 0;
+  color: var(--cream-muted);
+  text-align: center;
+}
+
+.menu-games {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.menu-game {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 6px 4px 0;
+  border-radius: var(--radius-small);
+  background: rgb(255 255 255 / 0.35);
+  border: 1px solid rgb(185 156 99 / 0.5);
+}
+
+.menu-game.is-yourturn {
+  border-color: var(--enamel-red);
+  box-shadow: inset 4px 0 0 var(--enamel-red);
+}
+
+.menu-game-link {
+  flex: 1;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas:
+    'code detail'
+    'names names';
+  column-gap: 10px;
+  min-height: 44px;
+  padding: 6px 10px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.menu-game-link:hover .menu-game-code {
+  text-decoration: underline;
+}
+
+.menu-game-code {
+  grid-area: code;
+  font-family: var(--font-engraved);
+  font-size: 1.0625rem;
+  letter-spacing: 0.04em;
+}
+
+.menu-game-detail {
+  grid-area: detail;
+  justify-self: end;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.menu-game.is-gone .menu-game-detail,
+.menu-game.is-left .menu-game-detail {
+  font-weight: 400;
+  font-style: italic;
+  color: var(--ink-muted);
+}
+
+.menu-game-names {
+  grid-area: names;
+  font-size: 0.875rem;
+  color: var(--ink-muted);
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.stat {
+  padding: 8px 10px;
+  border-radius: var(--radius-small);
+  background: rgb(255 255 255 / 0.35);
+  border: 1px solid rgb(185 156 99 / 0.5);
+}
+
+.stat-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.stat-value {
+  margin: 2px 0 0;
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  color: #3a2415;
+}

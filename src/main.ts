@@ -16,6 +16,7 @@ import { toString as urlToString } from 'foldkit/url'
 import { Device, authHeaders, loadDevice, loadPlayerName, savePlayerName } from './device'
 import { PlayerAction, clampSeatCount, isBotTurn, maybeTurnStep } from './domain/game'
 import {
+  LOCAL_SEAT,
   LocalTable,
   actLocally,
   dealLocalTable,
@@ -24,6 +25,8 @@ import {
   playLocalBot,
 } from './localTable'
 import { Message } from './message'
+import { FetchMenu, MenuState, QueueLocalResult, menuAfterFailure } from './menuSync'
+import { seatResult } from './domain/results'
 import { TurnStep } from './model'
 import {
   Connection,
@@ -51,6 +54,7 @@ import {
 import { AppRoute, gamePath, urlToAppRoute } from './route'
 import { CreateState, Home, emptyHome, homeView } from './screens/home'
 import { lobbyView, messageScreen } from './screens/lobby'
+import { menuView } from './screens/menu'
 import { PingStatus, TableMode, makeTable } from './table'
 import { tableView } from './view'
 
@@ -71,6 +75,7 @@ export const Model = Schema.Struct({
   playerName: Schema.String,
   seatCount: Schema.Number,
   device: Device,
+  menu: MenuState,
 })
 export type Model = typeof Model.Type
 
@@ -190,6 +195,8 @@ const withScreen = (model: Model, screen: Screen): Model =>
 const goHome = (model: Model): Model =>
   withScreen(model, Screen.Home({ home: emptyHome }))
 
+const fetchMenu = (model: Model) => FetchMenu({ device: model.device })
+
 const screenForRoute = (model: Model, route: AppRoute): Screen =>
   AppRoute.match<Screen>(route, {
     Home: () =>
@@ -205,10 +212,26 @@ const screenForRoute = (model: Model, route: AppRoute): Screen =>
 
 // LOCAL TABLE
 
+// NOTE: A local game that just ended queues this device's result, to be
+// posted to its stats the next time the menu loads.
+const localFinishCommands = (model: Model, table: LocalTable) => {
+  const wasOver =
+    model.screen._tag === 'Local' &&
+    model.screen.table.game.gameId === table.game.gameId &&
+    model.screen.table.game.phase._tag === 'GameOver'
+  return !wasOver && table.game.phase._tag === 'GameOver'
+    ? Option.match(seatResult(table.game, LOCAL_SEAT), {
+        onNone: () => [],
+        onSome: result => [QueueLocalResult({ result })],
+      })
+    : []
+}
+
 const scheduleLocalBot = (model: Model, table: LocalTable): UpdateReturn => {
   const next = withScreen(model, Screen.Local({ table }))
+  const finishCommands = localFinishCommands(model, table)
   return Option.match(maybeTurnStep(table.game), {
-    onNone: () => ({ model: next }),
+    onNone: () => ({ model: next, commands: finishCommands }),
     onSome: step =>
       isBotTurn(table.game)
         ? {
@@ -354,11 +377,13 @@ export const update = (model: Model, message: Message) =>
 
     ChangedUrl: ({ url }) => {
       const route = urlToAppRoute(url)
+      const screen = screenForRoute(model, route)
       return {
         model: modifyFields(model, {
           route: () => route,
-          screen: () => screenForRoute(model, route),
+          screen: () => screen,
         }),
+        commands: screen._tag === 'Home' ? [fetchMenu(model)] : [],
       }
     },
 
@@ -473,8 +498,20 @@ export const update = (model: Model, message: Message) =>
 
     ClickedMenu: () => ({
       model: goHome(model),
-      commands: [Navigate({ url: '/' })],
+      commands: [Navigate({ url: '/' }), fetchMenu(model)],
     }),
+
+    SucceededFetchMenu: ({ menu }) => ({
+      model: modifyFields(model, { menu: () => MenuState.Loaded({ menu }) }),
+    }),
+
+    FailedFetchMenu: () => ({
+      model: modifyFields(model, { menu: menuAfterFailure }),
+    }),
+
+    CompletedQueueLocalResult: () => ({ model }),
+
+    ClickedMenuPing: () => ({ model }),
 
     ClickedPing: () => onOnline(model, game => sendFromOnline(model, game, ClientMessage.Ping())),
 
@@ -571,7 +608,7 @@ export const update = (model: Model, message: Message) =>
         const sent = sendFromOnline(model, game, ClientMessage.LeaveGame())
         return {
           model: goHome(sent.model),
-          commands: [...(sent.commands ?? []), Navigate({ url: '/' })],
+          commands: [...(sent.commands ?? []), Navigate({ url: '/' }), fetchMenu(model)],
         }
       }),
 
@@ -640,8 +677,13 @@ export const init: Runtime.RoutingApplicationInit<Model, Message, Flags> = (
     playerName: initialFlags.playerName,
     seatCount: DEFAULT_SEAT_COUNT,
     device: initialFlags.device,
+    menu: MenuState.Loading(),
   }
-  return { model: withScreen(base, screenForRoute(base, route)) }
+  const screen = screenForRoute(base, route)
+  return {
+    model: withScreen(base, screen),
+    commands: screen._tag === 'Home' ? [fetchMenu(base)] : [],
+  }
 }
 
 // MANAGED RESOURCE
@@ -753,7 +795,7 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document =>
       body: homeView(
         home,
         { playerName: model.playerName, seatCount: model.seatCount },
-        [],
+        menuView(model.menu, { now: 0 }, h),
         h,
       ),
     }),

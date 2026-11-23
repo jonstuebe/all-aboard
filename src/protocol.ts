@@ -3,6 +3,7 @@ import { defineTaggedUnion } from 'foldkit/schema'
 
 import { ClientView } from './domain/clientView'
 import { PlayerAction } from './domain/game'
+import { SeatResult, Stats } from './domain/results'
 
 // NOTE: Everything that crosses the wire between the app and the Worker is
 // declared here, once, as a Schema. Both sides decode what they receive, so a
@@ -107,3 +108,60 @@ export type CreateGameResponse = typeof CreateGameResponse.Type
 export const DEVICE_ID_HEADER = 'x-device-id'
 export const DEVICE_SECRET_HEADER = 'x-device-secret'
 export const DEVICE_ID_PATTERN = /^[A-Za-z0-9_-]{16,64}$/
+
+// MENU
+
+export const MenuStatus = Schema.Literals([
+  'YourTurn',
+  'Waiting',
+  'Lobby',
+  'Finished',
+  'Left',
+  'Gone',
+])
+export type MenuStatus = typeof MenuStatus.Type
+
+export const MenuEntry = Schema.Struct({
+  code: Schema.String,
+  status: MenuStatus,
+  seatNames: Schema.Array(Schema.String),
+  maybeCurrentName: Schema.Option(Schema.String),
+  updatedAt: Schema.Number,
+  maybeResult: Schema.Option(SeatResult),
+  maybeReason: Schema.Option(Schema.String),
+  maybePingAvailableAt: Schema.Option(Schema.Number),
+})
+export type MenuEntry = typeof MenuEntry.Type
+
+export const Menu = Schema.Struct({
+  games: Schema.Array(MenuEntry),
+  stats: Stats,
+})
+export type Menu = typeof Menu.Type
+
+export const MenuEntryJson = Schema.fromJsonString(Schema.toCodecJson(MenuEntry))
+export const encodeMenuEntry = Schema.encodeSync(MenuEntryJson)
+export const decodeMenuEntry = Schema.decodeUnknownOption(MenuEntryJson)
+
+export const MenuJson = Schema.fromJsonString(Schema.toCodecJson(Menu))
+export const encodeMenu = Schema.encodeSync(MenuJson)
+export const decodeMenu = Schema.decodeUnknownOption(MenuJson)
+
+// NOTE: A finished bot-only game, posted when the device is next online. The
+// id is made on the device, so posting the same result twice counts once.
+export const LocalResult = Schema.Struct({
+  id: Schema.String,
+  result: SeatResult,
+})
+export type LocalResult = typeof LocalResult.Type
+
+export const LocalResultsRequest = Schema.Struct({
+  results: Schema.Array(LocalResult),
+})
+export type LocalResultsRequest = typeof LocalResultsRequest.Type
+
+export const SeatResultJson = Schema.fromJsonString(Schema.toCodecJson(SeatResult))
+export const encodeSeatResult = Schema.encodeSync(SeatResultJson)
+export const decodeSeatResult = Schema.decodeUnknownOption(SeatResultJson)
+
+export const PAST_GAME_TTL_MS = 7 * 24 * 60 * 60 * 1000

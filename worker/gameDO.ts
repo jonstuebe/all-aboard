@@ -7,6 +7,8 @@ import {
   ServerMessage,
   decodeClientMessage,
   encodeGameSnapshot,
+  encodeMenuEntry,
+  encodeSeatResult,
   encodeServerMessage,
 } from '../src/protocol'
 import type { Env } from './env'
@@ -16,8 +18,14 @@ import {
   createRoom,
   decodeRoom,
   encodeRoom,
+  finishedResults,
+  hasHumans,
+  menuEntryFor,
+  resultKey,
+  seatedDeviceIds,
   snapshotFor,
 } from './room'
+import { writeTombstone } from './tombstone'
 
 // NOTE: One GameDO per friend game, addressed by its invite code. The Room
 // (seats, owners, the current Model) is saved as one row after every change,
@@ -237,10 +245,88 @@ export class GameDO extends DurableObject<Env> {
     })
   }
 
-  protected async afterChange(
-    _maybeBefore: Option.Option<Room>,
+  // NOTE: Keeps every seated device's menu in step with the room, records
+  // each human's result once when a game ends, and drops the menu entry of
+  // anyone removed from a lobby.
+  protected async syncPlayers(
+    maybeBefore: Option.Option<Room>,
     after: Room,
   ): Promise<void> {
+    const afterDevices = seatedDeviceIds(after)
+    const removedDevices = Option.match(maybeBefore, {
+      onNone: () => [],
+      onSome: before =>
+        seatedDeviceIds(before).filter(deviceId => !afterDevices.includes(deviceId)),
+    })
+    await Promise.all([
+      ...afterDevices.map(deviceId =>
+        Option.match(menuEntryFor(after, deviceId, Option.none()), {
+          onNone: async () => undefined,
+          onSome: entry =>
+            this.env.PLAYERS.getByName(deviceId).upsertGame(encodeMenuEntry(entry)),
+        }),
+      ),
+      ...removedDevices.map(deviceId =>
+        this.env.PLAYERS.getByName(deviceId).removeGame(after.code),
+      ),
+      ...finishedResults(maybeBefore, after).map(([deviceId, result]) =>
+        this.env.PLAYERS.getByName(deviceId).recordResult(
+          resultKey(after),
+          encodeSeatResult(result),
+        ),
+      ),
+    ])
+  }
+
+  protected async afterChange(
+    maybeBefore: Option.Option<Room>,
+    after: Room,
+  ): Promise<void> {
+    await this.syncPlayers(maybeBefore, after)
     this.broadcast(after)
+    if (!hasHumans(after) && (after.phase === 'Lobby' || after.phase === 'RematchLobby')) {
+      await this.deleteGame('Everyone left the lobby.')
+    }
+  }
+
+  // DELETION
+
+  // NOTE: Removes the game for good. A tombstone in KV keeps the reason, every
+  // seated device's menu shows it, and open sockets get a Gone snapshot.
+  protected async deleteGame(reason: string): Promise<void> {
+    await Option.match(this.maybeRoom, {
+      onNone: async () => undefined,
+      onSome: async room => {
+        const now = this.now()
+        await writeTombstone(this.env, room.code, { reason, deletedAt: now })
+        await Promise.all(
+          seatedDeviceIds(room).map(deviceId =>
+            this.env.PLAYERS.getByName(deviceId).markGone(room.code, reason, now),
+          ),
+        )
+        const gone = ServerMessage.Snapshot({
+          snapshot: GameSnapshot.Gone({ code: room.code, reason }),
+        })
+        this.ctx.getWebSockets().forEach(socket => {
+          this.send(socket, gone)
+          try {
+            socket.close(1000, 'deleted')
+          } catch {
+            // NOTE: Already closed.
+          }
+        })
+        const offset = this.clockOffsetMs
+        await this.ctx.storage.deleteAlarm()
+        await this.ctx.storage.deleteAll()
+        this.maybeRoom = Option.none()
+        this.migrate()
+        if (offset !== 0) {
+          this.ctx.storage.sql.exec(
+            'INSERT INTO clock (id, offset_ms) VALUES (1, ?)',
+            offset,
+          )
+        }
+      },
+    })
   }
 }

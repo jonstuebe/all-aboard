@@ -4,7 +4,7 @@ import { UrlRequest } from 'foldkit/navigation'
 import { Url } from 'foldkit/url'
 
 import { TurnStep } from './model'
-import { ServerMessage } from './protocol'
+import { Menu, ServerMessage } from './protocol'
 
 export const Message = defineMessageUnion({
   // ROUTING
@@ -22,6 +22,10 @@ export const Message = defineMessageUnion({
   FailedCreateGame: { reason: Schema.String },
   UpdatedJoinCode: { value: Schema.String },
   SubmittedJoinCode: {},
+  SucceededFetchMenu: { menu: Menu },
+  FailedFetchMenu: {},
+  CompletedQueueLocalResult: {},
+  ClickedMenuPing: { code: Schema.String },
 
   // TABLE
   CompletedRollSeed: { seed: Schema.Number },

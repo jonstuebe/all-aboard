@@ -4,11 +4,14 @@ import { modifyFields } from 'foldkit/struct'
 import { projectView } from '../src/domain/clientView'
 import { BOT_NAMES, actAs, newGame } from '../src/domain/game'
 import { MAX_SEATS, MIN_SEATS, Model, type SeatConfig, TONE_COUNT } from '../src/model'
+import { seatResult, type SeatResult } from '../src/domain/results'
 import {
   type ClientMessage,
   ClientMessage as ClientMessageUnion,
   GameSnapshot,
   type LobbySeat,
+  type MenuEntry,
+  type MenuStatus,
   NAME_MAX_LENGTH,
 } from '../src/protocol'
 
@@ -466,5 +469,86 @@ export const snapshotFor = (room: Room, deviceId: string): GameSnapshot => {
                 canPing: false,
               }),
           }),
+  })
+}
+
+// MENU
+
+// NOTE: Every device that holds a seat, including seats that left, so the
+// GameDO can keep each one's menu entry current.
+export const seatedDeviceIds = (room: Room): ReadonlyArray<string> =>
+  Array.getSomes(Array.map(room.seats, seat => seat.maybeDeviceId))
+
+const menuStatus = (room: Room, seatIndex: number): MenuStatus => {
+  if (room.seats[seatIndex]?.hasLeft === true) {
+    return 'Left'
+  }
+  if (isLobbyPhase(room)) {
+    return 'Lobby'
+  }
+  if (room.phase === 'Finished') {
+    return 'Finished'
+  }
+  return Option.exists(room.maybeGame, game => game.currentPlayerIndex === seatIndex)
+    ? 'YourTurn'
+    : 'Waiting'
+}
+
+export const menuEntryFor = (
+  room: Room,
+  deviceId: string,
+  maybePingAvailableAt: Option.Option<number>,
+): Option.Option<MenuEntry> =>
+  Option.map(seatIndexOf(room, deviceId), seatIndex => {
+    const status = menuStatus(room, seatIndex)
+    return {
+      code: room.code,
+      status,
+      seatNames: Array.map(room.seats, seat => seat.name),
+      maybeCurrentName:
+        status === 'Waiting'
+          ? Option.flatMap(room.maybeGame, game =>
+              Option.map(Array.get(game.players, game.currentPlayerIndex), player => player.name),
+            )
+          : Option.none(),
+      updatedAt: Option.getOrElse(room.maybeFinishedAt, () => room.lastMoveAt),
+      maybeResult:
+        status === 'Finished'
+          ? Option.flatMap(room.maybeGame, game => seatResult(game, seatIndex))
+          : Option.none(),
+      maybeReason: Option.none(),
+      maybePingAvailableAt: status === 'Waiting' ? maybePingAvailableAt : Option.none(),
+    }
+  })
+
+export const resultKey = (room: Room): string => `${room.code}#${room.generation}`
+
+// NOTE: The results to record when a game has just finished, one per human
+// still in it. Seats that left (now bots) don't count toward that person.
+export const finishedResults = (
+  before: Option.Option<Room>,
+  after: Room,
+): ReadonlyArray<readonly [string, SeatResult]> => {
+  const justFinished =
+    after.phase === 'Finished' &&
+    !Option.exists(before, room => room.phase === 'Finished' && room.generation === after.generation)
+  if (!justFinished) {
+    return []
+  }
+  return Option.match(after.maybeGame, {
+    onNone: () => [],
+    onSome: game =>
+      Array.getSomes(
+        Array.map(after.seats, (seat, seatIndex) =>
+          seat.kind === 'Human' && !seat.hasLeft
+            ? Option.flatMap(seat.maybeDeviceId, deviceId =>
+                Option.map(
+                  seatResult(game, seatIndex),
+                  result => [deviceId, result] as const,
+                ),
+              )
+            : Option.none(),
+        ),
+      ),
   })
 }

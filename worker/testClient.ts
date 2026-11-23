@@ -15,8 +15,11 @@ import { ROUTES } from '../src/domain/board'
 import { PlayerAction } from '../src/domain/game'
 import {
   type ClientMessage,
+  ClientMessage as ClientMessages,
   type GameSnapshot,
+  type Menu,
   type ServerMessage,
+  decodeMenu,
   decodeServerMessage,
   encodeClientMessage,
 } from '../src/protocol'
@@ -206,3 +209,74 @@ export const chooseAction = (view: ClientView): PlayerAction => {
 }
 
 export { isViewerTurn }
+
+export const fetchMenu = async (device: Device): Promise<Menu> => {
+  const response = await api(device, '/api/me')
+  return Option.getOrThrow(decodeMenu(await response.text()))
+}
+
+// NOTE: Opens a lobby, seats a guest, and starts the game.
+export const startFriendGame = async (
+  hostName = 'Ada',
+  guestName = 'Bea',
+): Promise<
+  Readonly<{ code: string; host: TestClient; guest: TestClient }>
+> => {
+  const hostDevice = makeDevice('host')
+  const code = await createGame(hostDevice, hostName)
+  const host = await connect(hostDevice, code)
+  const guest = await connect(makeDevice('guest'), code)
+  guest.send(ClientMessages.JoinLobby({ name: guestName, tone: 1 }))
+  await host.waitFor(
+    m =>
+      m._tag === 'Snapshot' &&
+      m.snapshot._tag === 'Lobby' &&
+      m.snapshot.seats.length === 2,
+    'guest seated',
+  )
+  host.send(ClientMessages.StartGame())
+  await Promise.all(
+    [host, guest].map(client =>
+      client.waitFor(
+        m => m._tag === 'Snapshot' && m.snapshot._tag === 'Table',
+        'table',
+      ),
+    ),
+  )
+  return { code, host, guest }
+}
+
+// NOTE: Plays greedy moves for whichever client is to move until game over.
+export const playUntilOver = async (
+  clients: ReadonlyArray<TestClient>,
+): Promise<number> => {
+  const step = async (moves: number): Promise<number> => {
+    if (moves > 2000) {
+      throw new Error('game did not finish')
+    }
+    const views = Array.getSomes(
+      Array.map(clients, client => tableView(client.latest())),
+    )
+    if (Array.some(views, view => view.phase._tag === 'GameOver')) {
+      return moves
+    }
+    const maybeActor = Array.findFirst(clients, client =>
+      Option.exists(tableView(client.latest()), isViewerTurn),
+    )
+    if (Option.isNone(maybeActor)) {
+      await new Promise(resolve => setTimeout(resolve, 5))
+      return step(moves)
+    }
+    const actor = maybeActor.value
+    const view = Option.getOrThrow(tableView(actor.latest()))
+    const reply = nextMessage(actor, 'reply to action')
+    actor.send(ClientMessages.TakeAction({ action: chooseAction(view) }))
+    if ((await reply)._tag === 'Rejected') {
+      const fallback = nextMessage(actor, 'reply to pass')
+      actor.send(ClientMessages.TakeAction({ action: PlayerAction.Passed() }))
+      await fallback
+    }
+    return step(moves + 1)
+  }
+  return step(0)
+}

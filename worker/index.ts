@@ -6,8 +6,10 @@ import {
   DEVICE_ID_PATTERN,
   DEVICE_SECRET_HEADER,
   GameSnapshot,
+  LocalResultsRequest,
   decodeGameSnapshot,
   encodeGameSnapshot,
+  encodeSeatResult,
   isValidCode,
   normalizeCode,
 } from '../src/protocol'
@@ -148,6 +150,38 @@ const connectToGame = async (
   return stub.fetch(new Request('https://game.internal/ws', { headers }))
 }
 
+const jsonText = (text: string): Response =>
+  new Response(text, {
+    headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
+  })
+
+const menu = async (env: Env, deviceId: string): Promise<Response> =>
+  jsonText(await env.PLAYERS.getByName(deviceId).menuJson(Date.now()))
+
+const LOCAL_RESULT_ID = /^local-[A-Za-z0-9_-]{6,64}$/
+const MAX_RESULTS_PER_POST = 50
+
+const postLocalResults = async (
+  env: Env,
+  request: Request,
+  deviceId: string,
+): Promise<Response> => {
+  const maybeBody = await readJson(request, LocalResultsRequest)
+  if (Option.isNone(maybeBody)) {
+    return fail(400, 'Send a list of results.')
+  }
+  const results = maybeBody.value.results
+    .filter(({ id }) => LOCAL_RESULT_ID.test(id))
+    .slice(0, MAX_RESULTS_PER_POST)
+  const player = env.PLAYERS.getByName(deviceId)
+  const recorded = await Promise.all(
+    results.map(({ id, result }) =>
+      player.recordResult(`${deviceId}:${id}`, encodeSeatResult(result)),
+    ),
+  )
+  return json({ accepted: results.map(({ id }) => id), recorded: recorded.filter(Boolean).length })
+}
+
 const GAME_PATH = /^\/api\/games\/([^/]+)(\/ws)?$/
 
 export const route = async (request: Request, env: Env): Promise<Response> => {
@@ -163,6 +197,14 @@ export const route = async (request: Request, env: Env): Promise<Response> => {
     return fail(401, 'This device isn’t recognised.')
   }
   const deviceId = maybeDeviceId.value
+
+  if (url.pathname === '/api/me' && request.method === 'GET') {
+    return menu(env, deviceId)
+  }
+
+  if (url.pathname === '/api/me/results' && request.method === 'POST') {
+    return postLocalResults(env, request, deviceId)
+  }
 
   if (url.pathname === '/api/games' && request.method === 'POST') {
     return createGame(env, request, deviceId)
