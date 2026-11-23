@@ -11,6 +11,7 @@ import {
   update,
   view,
 } from './main'
+import { enableMapZoom } from './mapZoom'
 import { guardPinchZoom } from './pinchGuard'
 import { trackScrollFades } from './scrollFade'
 
@@ -33,6 +34,7 @@ const application = Runtime.makeApplication({
 })
 
 guardPinchZoom()
+enableMapZoom()
 trackScrollFades()
 
 Runtime.run(application, { flags })

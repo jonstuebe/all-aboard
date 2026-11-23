@@ -300,6 +300,14 @@ const boardView = (model: Model, h: HtmlBuilder<Message>): Html =>
           ),
         ],
       ),
+      h.button(
+        [
+          h.Class('map-reset'),
+          h.Type('button'),
+          h.AriaLabel('Show the whole map'),
+        ],
+        ['Whole map'],
+      ),
     ],
   )
 

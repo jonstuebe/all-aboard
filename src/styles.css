@@ -421,6 +421,37 @@ button {
     0 8px 18px rgb(0 0 0 / 0.5);
 }
 
+/* The map zooms itself (mapZoom.ts). Pinches never reach the browser, and
+   once zoomed in one finger pans the map instead of scrolling the page. */
+.board-frame {
+  position: relative;
+  overflow: hidden;
+}
+
+.board-frame[data-zoomed='true'] .board {
+  touch-action: none;
+  cursor: grab;
+}
+
+.map-reset {
+  position: absolute;
+  top: calc(14px + var(--map-reset-inset, 0px));
+  right: 14px;
+  display: none;
+  padding: 6px 12px;
+  border: 1px solid var(--brass-dark);
+  border-radius: 999px;
+  background: rgb(251 244 222 / 0.94);
+  color: var(--ink);
+  font: 600 0.85rem/1.2 var(--font-body);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.35);
+  cursor: pointer;
+}
+
+.board-frame[data-zoomed='true'] .map-reset {
+  display: block;
+}
+
 .board {
   display: block;
   width: 100%;
@@ -2796,6 +2827,7 @@ button.card.deck:hover:not(:disabled) {
     border-radius: 0;
     background: var(--sea);
     box-shadow: inset -8px 0 14px rgb(0 0 0 / 0.35);
+    --map-reset-inset: env(safe-area-inset-top, 0px);
   }
 
   .board {
