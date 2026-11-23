@@ -25,6 +25,7 @@ export const HOME_VARIANTS = [
   { key: 'G', name: 'Ticket book tabs' },
   { key: 'H', name: 'Hero ticket' },
   { key: 'I', name: 'Ticket carousel' },
+  { key: 'J', name: 'Ticket wizard' },
 ] as const
 
 export type VariantProps = Readonly<{
@@ -34,6 +35,8 @@ export type VariantProps = Readonly<{
   menu: ReadonlyArray<Html>
   /** G only: which stub tab is open ('friends' | 'bots' | 'join'). */
   tab: string
+  /** J only: the wizard's step, slide direction and first step. */
+  wizard: Readonly<{ step: string; direction: string; firstStep: string }>
 }>
 
 type H = HtmlBuilder<Message>
@@ -199,7 +202,10 @@ const variantB = (props: VariantProps, h: H): Html => {
             [
               h.p([h.Class('hv-b-class')], ['Second class']),
               h.h3([h.Class('hv-b-route')], ['With bots']),
-              h.p([h.Class('hv-b-fine')], ['Plays on this device, offline too.']),
+              h.p(
+                [h.Class('hv-b-fine')],
+                ['Plays on this device, offline too.'],
+              ),
               segmented(inputs, h, 'Players'),
               startBots(h),
             ],
@@ -254,13 +260,23 @@ const friendsSection = (home: Home, h: H): ReadonlyArray<Html> => [
 ]
 
 const botsSection = (inputs: HomeInputs, h: H): ReadonlyArray<Html> => [
-  ...sectionHead(h, 'Second class', 'With bots', 'Plays on this device, offline too.'),
+  ...sectionHead(
+    h,
+    'Second class',
+    'With bots',
+    'Plays on this device, offline too.',
+  ),
   segmented(inputs, h, 'Players'),
   startBots(h),
 ]
 
 const joinSection = (home: Home, h: H): ReadonlyArray<Html> => [
-  ...sectionHead(h, 'Transfer', 'Join a friend', 'Type the code they sent you.'),
+  ...sectionHead(
+    h,
+    'Transfer',
+    'Join a friend',
+    'Type the code they sent you.',
+  ),
   joinForm(home, h, 'Invite code'),
 ]
 
@@ -299,7 +315,11 @@ const variantG = (props: VariantProps, h: H): Html => {
             ],
           ),
           h.div(
-            [h.Class('hv-g-tabs'), h.Role('tablist'), h.AriaLabel('How to play')],
+            [
+              h.Class('hv-g-tabs'),
+              h.Role('tablist'),
+              h.AriaLabel('How to play'),
+            ],
             Array.map(TABS, ({ key, label }) =>
               h.button(
                 [
@@ -383,11 +403,7 @@ const variantH = (props: VariantProps, h: H): Html => {
 // swipe through. The next ticket peeks in from the right on a phone; on a
 // wide screen all three sit side by side.
 
-const carouselTicket = (
-  h: H,
-  index: number,
-  body: ReadonlyArray<Html>,
-): Html =>
+const carouselTicket = (h: H, index: number, body: ReadonlyArray<Html>): Html =>
   h.li(
     [h.Class('hv-b-ticket hv-i-ticket')],
     [band(h, `Ticket ${index} of 3`), h.div([h.Class('hv-i-body')], body)],
@@ -418,12 +434,188 @@ const variantI = (props: VariantProps, h: H): Html => {
           carouselTicket(h, 3, joinSection(home, h)),
         ],
       ),
-      h.p([h.Class('hv-i-hint'), h.AriaHidden(true)], ['Swipe for more tickets →']),
+      h.p(
+        [h.Class('hv-i-hint'), h.AriaHidden(true)],
+        ['Swipe for more tickets →'],
+      ),
       createError(home, h, 'hv-error'),
       h.div([h.Class('hv-rest')], rest(props)),
     ],
   )
 }
+
+// J · TICKET WIZARD
+// Refined H as one question per screen: name (skipped when this device
+// already remembers one), then how to play, then players or the invite
+// code. Each step is its own view function, so moving between steps
+// replaces the DOM and the entry animation plays again.
+
+const stepFrame = (
+  props: VariantProps,
+  h: H,
+  step: string,
+  children: ReadonlyArray<Html>,
+): Html =>
+  h.div(
+    [
+      h.Class(
+        `hv-j-step is-${props.wizard.direction === 'back' ? 'back' : 'forward'}`,
+      ),
+      h.DataAttribute('step', step),
+    ],
+    children,
+  )
+
+const backButton = (h: H): Html =>
+  h.button(
+    [
+      h.Class('hv-btn is-quiet hv-j-back'),
+      h.Type('button'),
+      h.OnClick(Message.ClickedWizardBack()),
+    ],
+    ['← Back'],
+  )
+
+const playingAs = (inputs: HomeInputs, h: H): Html =>
+  h.p(
+    [h.Class('hv-j-playing')],
+    [
+      h.span([], [`Playing as ${inputs.playerName.trim()}`]),
+      h.span([h.AriaHidden(true)], ['·']),
+      h.button(
+        [
+          h.Class('hv-j-change'),
+          h.Type('button'),
+          h.OnClick(Message.ClickedWizardChangeName()),
+        ],
+        ['Change'],
+      ),
+    ],
+  )
+
+const wizardName = (props: VariantProps, h: H): Html =>
+  stepFrame(props, h, 'name', [
+    h.h2([h.Class('hv-b-title hv-j-question')], ['What’s your name?']),
+    h.p(
+      [h.Class('hv-b-fine')],
+      ['Friends see it at the table. This device remembers it.'],
+    ),
+    h.form(
+      [h.Class('hv-j-form'), h.OnSubmit(Message.ClickedWizardContinue())],
+      [
+        nameField(props.inputs, h, 'Passenger name'),
+        h.button(
+          [
+            h.Class('hv-btn is-friends'),
+            h.Type('submit'),
+            h.Disabled(props.inputs.playerName.trim() === ''),
+          ],
+          ['Continue'],
+        ),
+      ],
+    ),
+  ])
+
+const wizardMode = (props: VariantProps, h: H): Html =>
+  stepFrame(props, h, 'mode', [
+    h.div(
+      [h.Class('hv-j-top')],
+      [
+        props.wizard.firstStep === 'name' ? backButton(h) : h.empty,
+        playingAs(props.inputs, h),
+      ],
+    ),
+    h.h2([h.Class('hv-b-title hv-j-question')], ['How do you want to play?']),
+    h.div(
+      [h.Class('hv-j-choices')],
+      [
+        h.button(
+          [
+            h.Class('hv-btn is-friends hv-j-choice'),
+            h.Type('button'),
+            h.Disabled(isCreating(props.home)),
+            h.OnClick(Message.ClickedNewFriendGame()),
+          ],
+          [
+            h.span(
+              [h.Class('hv-j-choice-title')],
+              [isCreating(props.home) ? 'Opening lobby…' : 'Play with friends'],
+            ),
+            h.span(
+              [h.Class('hv-j-choice-sub')],
+              ['Open a lobby and share the code'],
+            ),
+          ],
+        ),
+        h.button(
+          [
+            h.Class('hv-btn is-bots hv-j-choice'),
+            h.Type('button'),
+            h.OnClick(Message.ClickedWizardMode({ mode: 'bots' })),
+          ],
+          [
+            h.span([h.Class('hv-j-choice-title')], ['Play with bots']),
+            h.span(
+              [h.Class('hv-j-choice-sub')],
+              ['On this device, offline too'],
+            ),
+          ],
+        ),
+        h.button(
+          [
+            h.Class('hv-btn is-quiet hv-j-secondary'),
+            h.Type('button'),
+            h.OnClick(Message.ClickedWizardMode({ mode: 'join' })),
+          ],
+          ['Have an invite code?'],
+        ),
+      ],
+    ),
+    createError(props.home, h, 'hv-error'),
+  ])
+
+const wizardBots = (props: VariantProps, h: H): Html =>
+  stepFrame(props, h, 'bots', [
+    h.div([h.Class('hv-j-top')], [backButton(h), playingAs(props.inputs, h)]),
+    h.h2([h.Class('hv-b-title hv-j-question')], ['How many players?']),
+    h.p([h.Class('hv-b-fine')], ['You plus bots for the other seats.']),
+    segmented(props.inputs, h, 'Players'),
+    startBots(h),
+  ])
+
+const wizardJoin = (props: VariantProps, h: H): Html =>
+  stepFrame(props, h, 'join', [
+    h.div([h.Class('hv-j-top')], [backButton(h), playingAs(props.inputs, h)]),
+    h.h2([h.Class('hv-b-title hv-j-question')], ['Join a friend’s game']),
+    h.p([h.Class('hv-b-fine')], ['Type the code they sent you.']),
+    joinForm(props.home, h, 'Invite code'),
+    createError(props.home, h, 'hv-error'),
+  ])
+
+const wizardStep = (props: VariantProps, h: H): Html => {
+  switch (props.wizard.step) {
+    case 'mode':
+      return wizardMode(props, h)
+    case 'bots':
+      return wizardBots(props, h)
+    case 'join':
+      return wizardJoin(props, h)
+    default:
+      return wizardName(props, h)
+  }
+}
+
+const variantJ = (props: VariantProps, h: H): Html =>
+  h.div(
+    [h.Class('hv hv-b hv-h hv-j')],
+    [
+      h.section(
+        [h.Class('hv-b-ticket hv-j-card'), h.AriaLabel('New game')],
+        [h.div([h.Class('hv-b-body')], [wizardStep(props, h)])],
+      ),
+      h.div([h.Class('hv-rest')], rest(props)),
+    ],
+  )
 
 export const homeVariantView = (
   key: string,
@@ -437,6 +629,8 @@ export const homeVariantView = (
       return variantH(props, h)
     case 'I':
       return variantI(props, h)
+    case 'J':
+      return variantJ(props, h)
     default:
       return variantB(props, h)
   }

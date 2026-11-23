@@ -513,3 +513,132 @@
     display: none;
   }
 }
+
+/* ───────────── J · TICKET WIZARD ─────────────
+   Refined H, one question per step. A quiet raised button (Back, the
+   invite-code choice) and a text-link "Change" join the shared set. */
+
+.hv-btn.is-quiet {
+  --hv-btn-bg: linear-gradient(#fbf3df, #ecdcb4);
+  --hv-btn-edge: #8a6f4c;
+  --hv-btn-ink: #3a2415;
+  color: #3a2415;
+}
+
+.hv-j-card {
+  overflow: hidden;
+}
+
+.hv-j-card .hv-b-body {
+  padding: 20px 18px 22px;
+}
+
+.hv-j-step {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  animation: hv-j-in-forward 240ms ease-out both;
+}
+
+.hv-j-step.is-back {
+  animation-name: hv-j-in-back;
+}
+
+@keyframes hv-j-in-forward {
+  from {
+    opacity: 0;
+    transform: translateX(28px);
+  }
+}
+
+@keyframes hv-j-in-back {
+  from {
+    opacity: 0;
+    transform: translateX(-28px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hv-j-step,
+  .hv-j-step.is-back {
+    animation: none;
+  }
+}
+
+.hv-j .hv-j-question {
+  font-size: 1.9rem;
+  text-align: left;
+}
+
+.hv-j-step > .hv-b-fine {
+  margin: -8px 0 2px;
+}
+
+.hv-j-form,
+.hv-j-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.hv-j-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 44px;
+}
+
+.hv-j-back {
+  width: auto;
+  min-height: 44px;
+  padding: 0 16px;
+  font-size: 0.98rem;
+}
+
+.hv-j-playing {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 0 auto;
+  color: #5a4430;
+  font-size: 0.92rem;
+}
+
+.hv-j-change {
+  min-height: 44px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: #a8382a;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.hv-j-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  min-height: 84px;
+  padding: 14px 20px;
+  text-align: left;
+}
+
+.hv-j-choice-title {
+  font-family: var(--font-display);
+  font-size: 1.45rem;
+  font-weight: 400;
+}
+
+.hv-j-choice-sub {
+  font-size: 0.95rem;
+  font-weight: 500;
+  opacity: 0.9;
+}
+
+.hv-j-secondary {
+  min-height: 48px;
+  font-size: 1rem;
+}

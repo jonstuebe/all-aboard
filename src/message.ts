@@ -34,6 +34,10 @@ export const Message = defineMessageUnion({
   SteppedHomeVariant: { step: Schema.Number },
   CompletedReplaceVariantUrl: {},
   ClickedHomeTab: { tab: Schema.String },
+  ClickedWizardContinue: {},
+  ClickedWizardMode: { mode: Schema.String },
+  ClickedWizardBack: {},
+  ClickedWizardChangeName: {},
 
   // NOTIFICATIONS
   CheckedNotifications: { status: NotificationStatus },

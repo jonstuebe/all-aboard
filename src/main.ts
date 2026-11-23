@@ -123,6 +123,11 @@ export const Model = Schema.Struct({
   notifications: NotificationStatus,
   homeVariant: Schema.String,
   homeTab: Schema.String,
+  // PROTOTYPE (variant J): wizard step is 'name' | 'mode' | 'bots' | 'join';
+  // direction drives the slide; firstStep is 'mode' when a name was remembered.
+  wizardStep: Schema.String,
+  wizardDirection: Schema.String,
+  wizardFirstStep: Schema.String,
 })
 export type Model = typeof Model.Type
 
@@ -628,6 +633,38 @@ export const update = (model: Model, message: Message) =>
       model: modifyFields(model, { homeTab: () => tab }),
     }),
 
+    ClickedWizardContinue: () =>
+      model.playerName.trim() === ''
+        ? { model }
+        : {
+            model: modifyFields(model, {
+              wizardStep: () => 'mode',
+              wizardDirection: () => 'forward',
+            }),
+            commands: [SavePlayerName({ name: model.playerName.trim() })],
+          },
+
+    ClickedWizardMode: ({ mode }) => ({
+      model: modifyFields(model, {
+        wizardStep: () => (mode === 'join' ? 'join' : 'bots'),
+        wizardDirection: () => 'forward',
+      }),
+    }),
+
+    ClickedWizardBack: () => ({
+      model: modifyFields(model, {
+        wizardStep: () => (model.wizardStep === 'mode' ? 'name' : 'mode'),
+        wizardDirection: () => 'back',
+      }),
+    }),
+
+    ClickedWizardChangeName: () => ({
+      model: modifyFields(model, {
+        wizardStep: () => 'name',
+        wizardDirection: () => 'back',
+      }),
+    }),
+
     TickedClock: ({ now }) => ({
       model: modifyFields(model, { now: () => now }),
     }),
@@ -871,6 +908,9 @@ export const init: Runtime.RoutingApplicationInit<Model, Message, Flags> = (
     notifications: NotificationStatus.Checking(),
     homeVariant: variantFromSearch(HOME_VARIANTS, url.search),
     homeTab: 'friends',
+    wizardStep: initialFlags.playerName.trim() === '' ? 'name' : 'mode',
+    wizardDirection: 'forward',
+    wizardFirstStep: initialFlags.playerName.trim() === '' ? 'name' : 'mode',
   }
   const screen = screenForRoute(base, route)
   return {
@@ -1046,7 +1086,18 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document =>
               [
                 homeVariantView(
                   model.homeVariant,
-                  { home, inputs, notifications, menu, tab: model.homeTab },
+                  {
+                    home,
+                    inputs,
+                    notifications,
+                    menu,
+                    tab: model.homeTab,
+                    wizard: {
+                      step: model.wizardStep,
+                      direction: model.wizardDirection,
+                      firstStep: model.wizardFirstStep,
+                    },
+                  },
                   h,
                 ),
                 prototypeSwitcher(HOME_VARIANTS, model.homeVariant, h),
