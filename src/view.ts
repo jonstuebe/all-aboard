@@ -1,4 +1,4 @@
-import { Array, Match, Option, pipe } from 'effect'
+import { Array, Match, Option, Result, pipe } from 'effect'
 import type { Document, Html, HtmlBuilder } from 'foldkit/html'
 
 import {
@@ -37,6 +37,7 @@ import {
   maybeRouteOwner,
   maybeTurnStep,
 } from './domain/game'
+import { AnimateHandRow, HAND_CARD_DATA } from './handMotion'
 import { Message } from './message'
 import {
   type Model,
@@ -585,26 +586,46 @@ const handView = (
         ],
       ),
       h.ul(
-        [h.Class('hand-row')],
-        Array.map(CARD_ORDER, card => {
-          const count = countCards(player.hand, card)
-          return h.keyed('li')(
-            card,
-            [
-              h.Class(
-                `card hand-card color-${card.toLowerCase()}${count === 0 ? ' is-zero' : ''}`,
+        [
+          h.Class('hand-row'),
+          h.AriaLabel('Cards in your hand'),
+          h.OnMount(AnimateHandRow),
+        ],
+        pipe(
+          CARD_ORDER,
+          Array.filterMap(card => {
+            const count = countCards(player.hand, card)
+            return count > 0 ? Result.succeed({ card, count }) : Result.failVoid
+          }),
+          Array.match({
+            onEmpty: () => [
+              h.keyed('li')(
+                'empty',
+                [h.Class('hand-empty')],
+                ['No cards in hand. Draw from the row above the map.'],
               ),
-              h.AriaLabel(`${count} ${colorName(card)}`),
             ],
-            [
-              ...cardFace(card, h),
-              h.span(
-                [h.Class('hand-count'), h.AriaHidden(true)],
-                [`×${count}`],
+            onNonEmpty: held =>
+              Array.map(held, ({ card, count }) =>
+                h.keyed('li')(
+                  card,
+                  [
+                    h.Class(`card hand-card color-${card.toLowerCase()}`),
+                    h.DataAttribute(HAND_CARD_DATA, card),
+                    h.AriaLabel(`${count} ${colorName(card)}`),
+                  ],
+                  [
+                    ...cardFace(card, h),
+                    h.keyed('span')(
+                      `${card}-${count}`,
+                      [h.Class('hand-count'), h.AriaHidden(true)],
+                      [`×${count}`],
+                    ),
+                  ],
+                ),
               ),
-            ],
-          )
-        }),
+          }),
+        ),
       ),
     ],
   )
