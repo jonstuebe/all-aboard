@@ -290,7 +290,6 @@ const boardView = (model: Model, h: HtmlBuilder<Message>): Html =>
           ),
         ],
       ),
-      routeReadoutView(model, h),
     ],
   )
 
@@ -838,26 +837,64 @@ const passView = (model: Model, h: HtmlBuilder<Message>): Html =>
       )
     : h.empty
 
-const controlsView = (model: Model, h: HtmlBuilder<Message>): Html =>
-  pipe(
-    model.players,
-    Array.get(HUMAN_INDEX),
-    Option.match({
-      onNone: () => h.div([h.Class('controls is-loading')], ['Dealing…']),
-      onSome: human =>
-        h.div(
-          [h.Class('controls')],
-          [
-            noticeView(model, h),
-            passView(model, h),
-            marketView(model, h),
-            handView(model, human, h),
-            ticketsView(model, human, h),
-            logView(model, h),
-          ],
+const playAreaView = (model: Model, h: HtmlBuilder<Message>): Html =>
+  h.div(
+    [h.Class('play-area')],
+    Phase.match<ReadonlyArray<Html>>(model.phase, {
+      GameOver: () => [boardView(model, h)],
+      Dealing: () => [boardView(model, h)],
+      Playing: () =>
+        pipe(
+          model.players,
+          Array.get(HUMAN_INDEX),
+          Option.match({
+            onNone: () => [boardView(model, h)],
+            onSome: human => [
+              noticeView(model, h),
+              passView(model, h),
+              marketView(model, h),
+              boardView(model, h),
+              handView(model, human, h),
+            ],
+          }),
         ),
     }),
   )
+
+const sidebarView = (model: Model, h: HtmlBuilder<Message>): Html =>
+  h.aside(
+    [h.Class('sidebar'), h.AriaLabel('Players, tickets and moves')],
+    [routeReadoutView(model, h), ...sidebarPanels(model, h)],
+  )
+
+const sidebarPanels = (
+  model: Model,
+  h: HtmlBuilder<Message>,
+): ReadonlyArray<Html> =>
+  Phase.match<ReadonlyArray<Html>>(model.phase, {
+    GameOver: ({ standings }) => [
+      resultsView(model, standings, h),
+      scoreboardView(model, h),
+      logView(model, h),
+    ],
+    Dealing: () => [
+      h.div([h.Class('panel is-loading')], ['Dealing…']),
+      scoreboardView(model, h),
+    ],
+    Playing: () =>
+      pipe(
+        model.players,
+        Array.get(HUMAN_INDEX),
+        Option.match({
+          onNone: () => [h.div([h.Class('panel is-loading')], ['Dealing…'])],
+          onSome: human => [
+            scoreboardView(model, h),
+            ticketsView(model, human, h),
+            logView(model, h),
+          ],
+        }),
+      ),
+  })
 
 export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
   title: Match.value(isHumanTurn(model)).pipe(
@@ -870,21 +907,7 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
       headerView(model, h),
       h.main(
         [h.Class('table')],
-        [
-          h.div(
-            [h.Class('play-area')],
-            [boardView(model, h), scoreboardView(model, h)],
-          ),
-          Phase.match<Html>(model.phase, {
-            Dealing: () => controlsView(model, h),
-            Playing: () => controlsView(model, h),
-            GameOver: ({ standings }) =>
-              h.div(
-                [h.Class('controls')],
-                [resultsView(model, standings, h), logView(model, h)],
-              ),
-          }),
-        ],
+        [playAreaView(model, h), sidebarView(model, h)],
       ),
     ],
   ),
