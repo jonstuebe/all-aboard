@@ -11,6 +11,8 @@ import {
   update,
   view,
 } from './main'
+import { guardPinchZoom } from './pinchGuard'
+import { trackScrollFades } from './scrollFade'
 
 const application = Runtime.makeApplication({
   Model,
@@ -29,5 +31,8 @@ const application = Runtime.makeApplication({
     Message,
   },
 })
+
+guardPinchZoom()
+trackScrollFades()
 
 Runtime.run(application, { flags })

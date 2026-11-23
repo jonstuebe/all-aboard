@@ -7,15 +7,23 @@ import type { ClientView } from './domain/clientView'
 // reading a rejected-move notice). It never enters the game Model, so the
 // server and the rules don't see it, and a notice only reaches the actor.
 
+// NOTE: On a phone the draw row, the hand and the tickets share one dock
+// under the map, and dockTab picks which of them shows. Wider screens show
+// all three and ignore it.
+export const DockTab = Schema.Literals(['Draw', 'Hand', 'Tickets'])
+export type DockTab = typeof DockTab.Type
+
 export const TableUi = Schema.Struct({
   maybeHoveredRouteId: Schema.Option(Schema.String),
   maybeNotice: Schema.Option(Schema.String),
+  dockTab: DockTab,
 })
 export type TableUi = typeof TableUi.Type
 
 export const emptyTableUi: TableUi = {
   maybeHoveredRouteId: Option.none(),
   maybeNotice: Option.none(),
+  dockTab: 'Draw',
 }
 
 export const PingStatus = defineTaggedUnion({

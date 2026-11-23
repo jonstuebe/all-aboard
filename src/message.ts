@@ -6,6 +6,7 @@ import { Url } from 'foldkit/url'
 import { TurnStep } from './model'
 import { NotificationStatus } from './notificationStatus'
 import { Menu, ServerMessage } from './protocol'
+import { DockTab } from './table'
 
 export const Message = defineMessageUnion({
   // ROUTING
@@ -64,6 +65,8 @@ export const Message = defineMessageUnion({
   ClickedRematch: {},
   HoveredRoute: { routeId: Schema.String },
   UnhoveredRoute: {},
+  ClickedDockTab: { tab: DockTab },
+  DraggedDockTab: { tab: DockTab },
   PressedKey: { key: Schema.String },
   CompletedWaitForBot: {
     gameId: Schema.Number,

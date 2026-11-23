@@ -99,7 +99,7 @@ import {
 } from './screens/home'
 import { lobbyView, messageScreen } from './screens/lobby'
 import { menuView } from './screens/menu'
-import { TableMode, makeTable } from './table'
+import { TableMode, type TableUi, makeTable } from './table'
 import { tableView } from './view'
 
 export { Message } from './message'
@@ -363,33 +363,30 @@ const takeTableAction = (model: Model, action: PlayerAction): UpdateReturn =>
         : { model },
   })
 
-const modifyHoveredRoute = (
+const modifyTableUi = (
   model: Model,
-  maybeRouteId: Option.Option<string>,
+  f: (ui: TableUi) => TableUi,
 ): UpdateReturn =>
   Screen.match<UpdateReturn>(model.screen, {
     Home: () => ({ model }),
     Local: ({ table }) => ({
       model: withScreen(
         model,
-        Screen.Local({
-          table: modifyFields(table, {
-            ui: ui =>
-              modifyFields(ui, { maybeHoveredRouteId: () => maybeRouteId }),
-          }),
-        }),
+        Screen.Local({ table: modifyFields(table, { ui: f }) }),
       ),
     }),
     Online: ({ game }) => ({
-      model: withOnlineGame(
-        model,
-        modifyFields(game, {
-          ui: ui =>
-            modifyFields(ui, { maybeHoveredRouteId: () => maybeRouteId }),
-        }),
-      ),
+      model: withOnlineGame(model, modifyFields(game, { ui: f })),
     }),
   })
+
+const modifyHoveredRoute = (
+  model: Model,
+  maybeRouteId: Option.Option<string>,
+): UpdateReturn =>
+  modifyTableUi(model, ui =>
+    modifyFields(ui, { maybeHoveredRouteId: () => maybeRouteId }),
+  )
 
 const scheduleReconnect = (model: Model, game: OnlineGame): UpdateReturn =>
   wantsSocket(game)
@@ -735,6 +732,12 @@ export const update = (model: Model, message: Message) =>
       modifyHoveredRoute(model, Option.some(routeId)),
 
     UnhoveredRoute: () => modifyHoveredRoute(model, Option.none()),
+
+    ClickedDockTab: ({ tab }) =>
+      modifyTableUi(model, ui => modifyFields(ui, { dockTab: () => tab })),
+
+    DraggedDockTab: ({ tab }) =>
+      modifyTableUi(model, ui => modifyFields(ui, { dockTab: () => tab })),
 
     PressedKey: ({ key }) =>
       Match.value(key.toLowerCase()).pipe(

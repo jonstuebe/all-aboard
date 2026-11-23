@@ -193,6 +193,7 @@
   line-height: 1.2;
   white-space: nowrap;
   color: #3a2415;
+  -webkit-user-select: all;
   user-select: all;
 }
 

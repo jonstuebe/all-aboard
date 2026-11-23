@@ -41,7 +41,8 @@ import {
 import { AnimateHandRow, HAND_CARD_DATA } from './handMotion'
 import { Message } from './message'
 import { Phase, type Standing, type TurnStep } from './model'
-import type { Table } from './table'
+import { DOCK_TAB_DATA, DragDockTab } from './segmentDrag'
+import type { DockTab, Table } from './table'
 import {
   leaveDialogView,
   resultsActionView,
@@ -406,7 +407,7 @@ const headerView = (model: Model, h: HtmlBuilder<Message>): Html =>
 
 const scoreboardView = (model: Model, h: HtmlBuilder<Message>): Html =>
   h.ol(
-    [h.Class('scoreboard'), h.AriaLabel('Players')],
+    [h.Class('scoreboard scroll-fade'), h.AriaLabel('Players')],
     Array.map(model.players, (player, playerIndex) => {
       const isCurrent =
         Option.isSome(maybeTurnStep(model)) &&
@@ -834,6 +835,64 @@ const resultsView = (
   )
 }
 
+// DOCK
+
+const DOCK_TABS: ReadonlyArray<DockTab> = ['Draw', 'Hand', 'Tickets']
+
+const dockCount = (tab: DockTab, player: Player): Option.Option<number> => {
+  switch (tab) {
+    case 'Draw':
+      return Option.none()
+    case 'Hand':
+      return Option.some(player.hand.length)
+    case 'Tickets':
+      return Option.some(player.ticketIds.length)
+  }
+}
+
+// NOTE: Only phones show these tabs. Wider screens lay the draw row, hand
+// and tickets out together, so styles.css hides the tab row there.
+const dockTabsView = (
+  model: Model,
+  player: Player,
+  h: HtmlBuilder<Message>,
+): Html =>
+  h.div(
+    [
+      h.Class('dock-tabs'),
+      h.Role('tablist'),
+      h.AriaLabel('Cards'),
+      h.OnMount(DragDockTab),
+      h.Style({
+        '--segment-count': String(DOCK_TABS.length),
+        '--picked': String(Math.max(0, DOCK_TABS.indexOf(model.dockTab))),
+      }),
+    ],
+    [
+      h.span([h.Class('dock-tab-thumb'), h.AriaHidden(true)]),
+      ...Array.map(DOCK_TABS, tab => {
+        const isOn = model.dockTab === tab
+        return h.button(
+          [
+            h.Class(`dock-tab${isOn ? ' is-on' : ''}`),
+            h.Type('button'),
+            h.Role('tab'),
+            h.AriaSelected(isOn),
+            h.DataAttribute(DOCK_TAB_DATA, tab),
+            h.OnClick(Message.ClickedDockTab({ tab })),
+          ],
+          [
+            tab,
+            Option.match(dockCount(tab, player), {
+              onNone: () => h.empty,
+              onSome: count => h.span([h.Class('dock-count')], [String(count)]),
+            }),
+          ],
+        )
+      }),
+    ],
+  )
+
 // LAYOUT
 
 const noticeView = (model: Model, h: HtmlBuilder<Message>): Html =>
@@ -851,7 +910,7 @@ const passView = (model: Model, h: HtmlBuilder<Message>): Html =>
   !viewerHasAnyMove(model)
     ? h.button(
         [
-          h.Class('btn btn-red'),
+          h.Class('btn btn-red pass-button'),
           h.Type('button'),
           h.OnClick(Message.ClickedPass()),
         ],
@@ -874,6 +933,7 @@ const playAreaView = (model: Model, h: HtmlBuilder<Message>): Html =>
             onSome: human => [
               noticeView(model, h),
               passView(model, h),
+              dockTabsView(model, human, h),
               marketView(model, h),
               boardView(model, h),
               handView(model, human, h),
@@ -921,7 +981,7 @@ const sidebarPanels = (
 export const tableView = (model: Model, h: HtmlBuilder<Message>): Document => ({
   title: tableTitle(isHumanTurn(model)),
   body: h.div(
-    [h.Class('app')],
+    [h.Class(`app dock-${model.dockTab.toLowerCase()}`)],
     [
       headerView(model, h),
       h.main(
