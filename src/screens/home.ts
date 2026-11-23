@@ -158,11 +158,11 @@ const question = (h: H, text: string, hint: string): ReadonlyArray<Html> => [
 const backButton = (h: H): Html =>
   h.button(
     [
-      h.Class('btn btn-cream btn-compact'),
+      h.Class('btn btn-text btn-compact'),
       h.Type('button'),
       h.OnClick(Message.ClickedWizardBack()),
     ],
-    ['← Back'],
+    ['Back'],
   )
 
 const playingAs = (inputs: HomeInputs, h: H): Html =>
@@ -183,9 +183,10 @@ const playingAs = (inputs: HomeInputs, h: H): Html =>
     ],
   )
 
-const topRow = (home: Home, inputs: HomeInputs, h: H): Html =>
+// The quiet line under a step's controls: a way back, and whose name is on it.
+const footer = (home: Home, inputs: HomeInputs, h: H): Html =>
   h.div(
-    [h.Class('wizard-top')],
+    [h.Class('wizard-footer')],
     [hasBack(home) ? backButton(h) : h.empty, playingAs(inputs, h)],
   )
 
@@ -245,9 +246,10 @@ const choice = (
     ],
   )
 
+// NOTE: No back button here: the only step behind this one is the name, and
+// "Change" under the choices already goes there.
 const modeStep = (home: Home, inputs: HomeInputs, h: H): Html =>
   stepFrame(home, h, [
-    topRow(home, inputs, h),
     h.h2([h.Class('wizard-question')], ['How do you want to play?']),
     h.div(
       [h.Class('wizard-choices')],
@@ -277,12 +279,12 @@ const modeStep = (home: Home, inputs: HomeInputs, h: H): Html =>
         ),
       ],
     ),
+    playingAs(inputs, h),
     createError(home, h),
   ])
 
 const botsStep = (home: Home, inputs: HomeInputs, h: H): Html =>
   stepFrame(home, h, [
-    topRow(home, inputs, h),
     ...question(h, 'How many players?', 'You, plus bots in the other seats.'),
     seatCountPicker(inputs, h),
     h.button(
@@ -293,11 +295,11 @@ const botsStep = (home: Home, inputs: HomeInputs, h: H): Html =>
       ],
       ['Start with bots'],
     ),
+    footer(home, inputs, h),
   ])
 
 const joinStep = (home: Home, inputs: HomeInputs, h: H): Html =>
   stepFrame(home, h, [
-    topRow(home, inputs, h),
     ...question(h, 'Join a friend’s game', 'Type the code they sent you.'),
     h.form(
       [h.Class('wizard-join'), h.OnSubmit(Message.SubmittedJoinCode())],
@@ -318,6 +320,7 @@ const joinStep = (home: Home, inputs: HomeInputs, h: H): Html =>
       ],
     ),
     createError(home, h),
+    footer(home, inputs, h),
   ])
 
 const currentStep = (home: Home, inputs: HomeInputs, h: H): Html => {

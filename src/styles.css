@@ -46,7 +46,8 @@
 
   --z-sticky: 10;
 
-  --font-display: 'Rye', 'IM Fell English SC', Georgia, serif;
+  --font-logo: 'Rye', 'IM Fell English SC', Georgia, serif;
+  --font-display: 'Alfa Slab One', 'Zilla Slab', Georgia, serif;
   --font-engraved: 'IM Fell English SC', 'IM Fell English', Georgia, serif;
   --font-script: 'IM Fell English', Georgia, serif;
   --font-body: 'Zilla Slab', Georgia, 'Times New Roman', serif;
@@ -163,7 +164,7 @@ button {
 
 .brand-name {
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-logo);
   font-size: 1.45rem;
   font-weight: 400;
   letter-spacing: 0.05em;
@@ -590,7 +591,7 @@ button {
 }
 
 .cartouche-title {
-  font-family: var(--font-display);
+  font-family: var(--font-logo);
   font-size: 25px;
   letter-spacing: 2px;
   fill: #3a2415;
