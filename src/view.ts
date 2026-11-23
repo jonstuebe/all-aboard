@@ -484,6 +484,38 @@ const cardFace = (card: Card, h: HtmlBuilder<Message>): ReadonlyArray<Html> => [
   ),
 ]
 
+// "Take 2 cards" with a dot per draw, filled once a card is taken. Phones only.
+const drawProgressView = (
+  canAct: boolean,
+  step: TurnStep,
+  h: HtmlBuilder<Message>,
+): Html => {
+  const taken = step === 'DrawingSecondCard' ? 1 : 0
+  return h.div(
+    [h.Class('draw-progress')],
+    [
+      h.span(
+        [h.Class('draw-progress-title')],
+        [canAct ? 'Take 2 cards' : 'Draw on your turn'],
+      ),
+      canAct
+        ? h.span(
+            [h.Class('draw-progress-count')],
+            [
+              `${taken} of 2`,
+              ...Array.map([0, 1], index =>
+                h.i([
+                  h.Class(`draw-pip${index < taken ? ' is-taken' : ''}`),
+                  h.AriaHidden(true),
+                ]),
+              ),
+            ],
+          )
+        : h.empty,
+    ],
+  )
+}
+
 const marketView = (model: Model, h: HtmlBuilder<Message>): Html => {
   const maybeStep = maybeTurnStep(model)
   const canAct = isHumanTurn(model)
@@ -518,6 +550,9 @@ const marketView = (model: Model, h: HtmlBuilder<Message>): Html => {
                   [h.Class('card-key'), h.AriaHidden(true)],
                   [String(slot + 1)],
                 ),
+                card === 'Wild'
+                  ? h.span([h.Class('card-tag')], ['Whole turn'])
+                  : h.empty,
               ],
             ),
           ],
@@ -539,6 +574,8 @@ const marketView = (model: Model, h: HtmlBuilder<Message>): Html => {
           ),
         ],
       ),
+      drawProgressView(canAct, step, h),
+      h.p([h.Class('market-label')], ['Face up · you choose']),
       h.ul(
         [h.Class('card-row')],
         [
@@ -571,6 +608,13 @@ const marketView = (model: Model, h: HtmlBuilder<Message>): Html => {
                         [h.Class('card-kind'), h.AriaHidden(true)],
                         [`${model.deckCount} cards`],
                       ),
+                    ],
+                  ),
+                  h.span(
+                    [h.Class('deck-words')],
+                    [
+                      h.strong([], ['Draw from the deck']),
+                      h.span([], [`A surprise card · ${model.deckCount} left`]),
                     ],
                   ),
                   h.kbd([h.Class('card-key'), h.AriaHidden(true)], ['D']),
