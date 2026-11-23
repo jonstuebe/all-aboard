@@ -10,6 +10,7 @@ import {
   marketCardAt,
   maybeTurnStep,
   maybeViewerPayment,
+  maybeViewerTicketOffer,
   viewerHasAnyMove,
 } from '../src/domain/clientView'
 import { PlayerAction } from '../src/domain/game'
@@ -184,6 +185,10 @@ export const tableView = (snapshot: GameSnapshot): Option.Option<ClientView> =>
 
 // NOTE: A simple greedy player that only uses what its own ClientView shows.
 export const chooseAction = (view: ClientView): PlayerAction => {
+  const maybeOffer = maybeViewerTicketOffer(view)
+  if (Option.isSome(maybeOffer)) {
+    return PlayerAction.KeptTickets({ ticketIds: maybeOffer.value.ticketIds })
+  }
   const step = Option.getOrElse(
     maybeTurnStep(view),
     () => 'ChoosingAction' as const,
@@ -223,6 +228,47 @@ export const chooseAction = (view: ClientView): PlayerAction => {
 
 export { isViewerTurn }
 
+// NOTE: A seat can act on its turn, and also whenever it has tickets to pick
+// (at the start every seat picks at once).
+export const canViewerAct = (view: ClientView): boolean =>
+  isViewerTurn(view) || Option.isSome(maybeViewerTicketOffer(view))
+
+const isPickingStartTickets = (client: TestClient): boolean =>
+  Option.exists(tableView(client.latest()), view =>
+    Option.contains(maybeTurnStep(view), 'ChoosingStartTickets'),
+  )
+
+// NOTE: Every client keeps all its opening tickets, then waits for any bots
+// to pick theirs, so the first turn can begin.
+export const keepStartTickets = async (
+  clients: ReadonlyArray<TestClient>,
+): Promise<void> => {
+  for (const client of clients) {
+    const maybeOffer = Option.flatMap(
+      tableView(client.latest()),
+      maybeViewerTicketOffer,
+    )
+    if (Option.isSome(maybeOffer)) {
+      const reply = nextMessage(client, 'reply to keeping tickets')
+      client.send(
+        ClientMessages.TakeAction({
+          action: PlayerAction.KeptTickets({
+            ticketIds: maybeOffer.value.ticketIds,
+          }),
+        }),
+      )
+      await reply
+    }
+  }
+  const started = Date.now()
+  while (Array.some(clients, isPickingStartTickets)) {
+    if (Date.now() - started > 10_000) {
+      throw new Error('timed out waiting for opening tickets')
+    }
+    await new Promise(resolve => setTimeout(resolve, 5))
+  }
+}
+
 export const fetchMenu = async (device: Device): Promise<Menu> => {
   const response = await api(device, '/api/me')
   return Option.getOrThrow(decodeMenu(await response.text()))
@@ -254,6 +300,7 @@ export const startFriendGame = async (
       ),
     ),
   )
+  await keepStartTickets([host, guest])
   return { code, host, guest }
 }
 
@@ -272,7 +319,7 @@ export const playUntilOver = async (
       return moves
     }
     const maybeActor = Array.findFirst(clients, client =>
-      Option.exists(tableView(client.latest()), isViewerTurn),
+      Option.exists(tableView(client.latest()), canViewerAct),
     )
     if (Option.isNone(maybeActor)) {
       await new Promise(resolve => setTimeout(resolve, 5))

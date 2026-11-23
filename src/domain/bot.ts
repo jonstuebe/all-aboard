@@ -12,6 +12,7 @@ import {
 } from './board'
 import {
   PlayerAction,
+  actAs,
   applyAction,
   canDrawFromDeck,
   canTakeMarketCard,
@@ -21,7 +22,10 @@ import {
   marketCardAt,
   maybeClaimPayment,
   maybeRouteOwner,
+  maybeSeatPickingTickets,
   maybeTurnStep,
+  playerAt,
+  ticketsToKeep,
 } from './game'
 
 type PathNode = Readonly<{
@@ -107,6 +111,61 @@ const neededRoutes = (model: Model): ReadonlyArray<Route> => {
     }),
     Array.filter(route => Option.isNone(maybeRouteOwner(model, route.id))),
     Array.dedupeWith((self, that) => self.id === that.id),
+  )
+}
+
+// NOTE: Trains still to lay to finish a ticket, counting routes the seat
+// already owns as free. A ticket the seat can't reach at all costs the most.
+const ticketCost = (
+  model: Model,
+  playerIndex: number,
+  ticketId: string,
+): number => {
+  const ticket = ticketById(ticketId)
+  return Option.match(
+    shortestPath(model, playerIndex, ticket.from, ticket.to),
+    {
+      onNone: () => Number.MAX_SAFE_INTEGER,
+      onSome: routes =>
+        Array.reduce(routes, 0, (sum, route) =>
+          Option.isSome(maybeRouteOwner(model, route.id))
+            ? sum
+            : sum + route.length,
+        ),
+    },
+  )
+}
+
+type TicketChoice = Readonly<{ ticketId: string; cost: number; points: number }>
+
+// NOTE: A bot keeps the fewest tickets it must, cheapest to finish first
+// (ties go to more points), plus any it has already connected.
+export const chooseTicketsToKeep = (
+  model: Model,
+  playerIndex: number,
+  step: TurnStep,
+): ReadonlyArray<string> => {
+  const offered = playerAt(model, playerIndex).offeredTicketIds
+  const ranked = pipe(
+    offered,
+    Array.map((ticketId): TicketChoice => ({
+      ticketId,
+      cost: ticketCost(model, playerIndex, ticketId),
+      points: ticketById(ticketId).points,
+    })),
+    Array.sort(
+      Order.combine(
+        Order.mapInput(Order.Number, (entry: TicketChoice) => entry.cost),
+        Order.flip(
+          Order.mapInput(Order.Number, (entry: TicketChoice) => entry.points),
+        ),
+      ),
+    ),
+  )
+  const minimum = ticketsToKeep(step, offered.length)
+  return Array.map(
+    Array.filter(ranked, (entry, index) => index < minimum || entry.cost === 0),
+    entry => entry.ticketId,
   )
 }
 
@@ -246,9 +305,17 @@ export const decideBotAction = (model: Model): PlayerAction =>
   Option.match(maybeTurnStep(model), {
     onNone: () => PlayerAction.Passed(),
     onSome: step =>
-      step === 'DrawingSecondCard'
-        ? chooseDraw(model, step, wantedColors(model, neededRoutes(model)))
-        : chooseOpeningAction(model),
+      step === 'KeepingTickets' || step === 'ChoosingStartTickets'
+        ? PlayerAction.KeptTickets({
+            ticketIds: chooseTicketsToKeep(
+              model,
+              model.currentPlayerIndex,
+              step,
+            ),
+          })
+        : step === 'DrawingSecondCard'
+          ? chooseDraw(model, step, wantedColors(model, neededRoutes(model)))
+          : chooseOpeningAction(model),
   })
 
 const FALLBACK_ACTIONS: ReadonlyArray<PlayerAction> = [
@@ -261,6 +328,26 @@ const FALLBACK_ACTIONS: ReadonlyArray<PlayerAction> = [
 // falls back to the simplest legal moves, and as a last resort the turn is
 // left unchanged so the caller can see nothing happened.
 export const playBotStep = (model: Model): Model =>
+  Option.match(maybeSeatPickingTickets(model), {
+    onSome: seatIndex =>
+      Result.getOrElse(
+        actAs(
+          model,
+          seatIndex,
+          PlayerAction.KeptTickets({
+            ticketIds: chooseTicketsToKeep(
+              model,
+              seatIndex,
+              'ChoosingStartTickets',
+            ),
+          }),
+        ),
+        () => model,
+      ),
+    onNone: () => playTurnStep(model),
+  })
+
+const playTurnStep = (model: Model): Model =>
   pipe(
     Array.prepend(FALLBACK_ACTIONS, decideBotAction(model)),
     Array.findFirst(action => Result.getSuccess(applyAction(model, action))),

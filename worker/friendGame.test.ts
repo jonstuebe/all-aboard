@@ -10,6 +10,7 @@ import {
   chooseAction,
   connect,
   createGame,
+  keepStartTickets,
   makeDevice,
   nextMessage,
   tableView,
@@ -106,6 +107,7 @@ describe('a friend game over WebSocket', () => {
       m => m._tag === 'Snapshot' && isTable(m.snapshot),
       'guest table',
     )
+    await keepStartTickets([host, guest])
 
     const latecomer = await connect(makeDevice('late'), code)
     const closed = latecomer.latest()

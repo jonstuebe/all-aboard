@@ -1,4 +1,5 @@
 import {
+  Array,
   Clock,
   Duration,
   Effect,
@@ -626,6 +627,23 @@ export const update = (model: Model, message: Message) =>
       takeTableAction(model, PlayerAction.ClaimedRoute({ routeId })),
 
     ClickedDrawTicket: () => takeTableAction(model, PlayerAction.DrewTicket()),
+
+    ToggledOfferedTicket: ({ ticketId }) =>
+      modifyTableUi(model, ui =>
+        modifyFields(ui, {
+          returnedTicketIds: returned =>
+            Array.contains(returned, ticketId)
+              ? Array.filter(returned, id => id !== ticketId)
+              : Array.append(returned, ticketId),
+        }),
+      ),
+
+    ClickedKeepTickets: ({ ticketIds }) => {
+      const cleared = modifyTableUi(model, ui =>
+        modifyFields(ui, { returnedTicketIds: () => [] }),
+      ).model
+      return takeTableAction(cleared, PlayerAction.KeptTickets({ ticketIds }))
+    },
 
     ClickedPass: () => takeTableAction(model, PlayerAction.Passed()),
 

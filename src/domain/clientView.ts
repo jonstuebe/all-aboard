@@ -2,7 +2,13 @@ import { Array, Option, Schema, pipe } from 'effect'
 
 import { Claim, type Model, Phase, PlayerKind, type TurnStep } from '../model'
 import { Card, ROUTES, maybeRouteById } from './board'
-import { type Payment, countCards, findPayment, isTicketComplete } from './game'
+import {
+  type Payment,
+  countCards,
+  findPayment,
+  isTicketComplete,
+  ticketsToKeep,
+} from './game'
 
 // NOTE: A ClientView is everything one seat is allowed to know. It never holds
 // rngState (which predicts every future draw), the deck or ticket-pile order,
@@ -19,6 +25,8 @@ export const ClientPlayer = Schema.Struct({
   routePoints: Schema.Number,
   ticketIds: Schema.Array(Schema.String),
   ticketCount: Schema.Number,
+  offeredTicketIds: Schema.Array(Schema.String),
+  isPickingTickets: Schema.Boolean,
 })
 export type ClientPlayer = typeof ClientPlayer.Type
 
@@ -62,6 +70,8 @@ export const projectView = (model: Model, viewerIndex: number): ClientView => ({
       routePoints: player.routePoints,
       ticketIds: isViewer ? player.ticketIds : [],
       ticketCount: player.ticketIds.length,
+      offeredTicketIds: isViewer ? player.offeredTicketIds : [],
+      isPickingTickets: Array.isReadonlyArrayNonEmpty(player.offeredTicketIds),
     }
   }),
   currentPlayerIndex: model.currentPlayerIndex,
@@ -99,6 +109,7 @@ export const currentPlayer = (view: ClientView): Option.Option<ClientPlayer> =>
 
 export const isViewerTurn = (view: ClientView): boolean =>
   Option.isSome(maybeTurnStep(view)) &&
+  !Option.contains(maybeTurnStep(view), 'ChoosingStartTickets') &&
   view.currentPlayerIndex === view.viewerIndex &&
   Option.exists(viewer(view), player => player.kind === 'Human')
 
@@ -155,3 +166,21 @@ export const viewerHasAnyMove = (view: ClientView): boolean =>
   Array.some(ROUTES, route => Option.isSome(maybeViewerPayment(view, route.id)))
 
 export { countCards }
+
+// NOTE: The tickets the viewer is choosing between right now, with how many
+// they must keep. None when there is nothing to pick.
+export const maybeViewerTicketOffer = (
+  view: ClientView,
+): Option.Option<
+  Readonly<{ ticketIds: ReadonlyArray<string>; minimum: number }>
+> =>
+  Option.flatMap(maybeTurnStep(view), step =>
+    Option.flatMap(viewer(view), player =>
+      Array.isReadonlyArrayNonEmpty(player.offeredTicketIds)
+        ? Option.some({
+            ticketIds: player.offeredTicketIds,
+            minimum: ticketsToKeep(step, player.offeredTicketIds.length),
+          })
+        : Option.none(),
+    ),
+  )

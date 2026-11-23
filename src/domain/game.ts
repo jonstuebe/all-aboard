@@ -22,10 +22,12 @@ import {
   MARKET_SIZE,
   ROUTES,
   type Route,
+  DRAWN_TICKETS_TO_KEEP,
   STARTING_HAND_SIZE,
-  STARTING_TICKETS,
   STARTING_TRAINS,
+  START_TICKETS_TO_KEEP,
   TICKETS,
+  TICKET_OFFER_SIZE,
   WILD_CARDS,
   cityById,
   maybeRouteById,
@@ -42,6 +44,7 @@ export const PlayerAction = defineTaggedUnion({
   TookMarketCard: { slot: Schema.Number },
   ClaimedRoute: { routeId: Schema.String },
   DrewTicket: {},
+  KeptTickets: { ticketIds: Schema.Array(Schema.String) },
   Passed: {},
 })
 export type PlayerAction = typeof PlayerAction.Type
@@ -124,17 +127,18 @@ export const newGame = (
     ),
     trains: STARTING_TRAINS,
     routePoints: 0,
-    ticketIds: pipe(
+    ticketIds: [],
+    offeredTicketIds: pipe(
       ticketIds,
-      Array.drop(index * STARTING_TICKETS),
-      Array.take(STARTING_TICKETS),
+      Array.drop(index * TICKET_OFFER_SIZE),
+      Array.take(TICKET_OFFER_SIZE),
     ),
   }))
   const dealtCards = seats.length * STARTING_HAND_SIZE
-  const dealtTickets = seats.length * STARTING_TICKETS
+  const dealtTickets = seats.length * TICKET_OFFER_SIZE
 
   const dealt = modifyFields(emptyModel(seed), {
-    phase: () => Phase.Playing({ step: 'ChoosingAction' }),
+    phase: () => Phase.Playing({ step: 'ChoosingStartTickets' }),
     rngState: () => ticketState,
     players: () => players,
     deck: () => Array.drop(deck, dealtCards),
@@ -143,11 +147,7 @@ export const newGame = (
   })
 
   return pipe(dealt, refillMarket, normalizeMarket, model =>
-    addLog(
-      model,
-      0,
-      'New game. Connect your tickets before the trains run out.',
-    ),
+    addLog(model, 0, 'New game. Everyone is picking destination tickets.'),
   )
 }
 
@@ -173,11 +173,50 @@ export const maybeTurnStep = (model: Model): Option.Option<TurnStep> =>
 export const isBotControlled = (player: Player): boolean =>
   player.kind !== 'Human'
 
+const isPickingStartTickets = (model: Model): boolean =>
+  Option.contains(maybeTurnStep(model), 'ChoosingStartTickets')
+
+// NOTE: While everyone picks their opening tickets, nobody has the turn. A bot
+// "moves" whenever some bot seat still has tickets to pick.
+const maybeBotPickingStartTickets = (model: Model): Option.Option<number> =>
+  Array.findFirstIndex(
+    model.players,
+    player =>
+      isBotControlled(player) &&
+      Array.isReadonlyArrayNonEmpty(player.offeredTicketIds),
+  )
+
 export const isHumanTurn = (model: Model): boolean =>
-  Option.isSome(maybeTurnStep(model)) && !isBotControlled(currentPlayer(model))
+  Option.isSome(maybeTurnStep(model)) &&
+  !isPickingStartTickets(model) &&
+  !isBotControlled(currentPlayer(model))
 
 export const isBotTurn = (model: Model): boolean =>
-  Option.isSome(maybeTurnStep(model)) && isBotControlled(currentPlayer(model))
+  Option.isSome(maybeTurnStep(model)) &&
+  (isPickingStartTickets(model)
+    ? Option.isSome(maybeBotPickingStartTickets(model))
+    : isBotControlled(currentPlayer(model)))
+
+// NOTE: Which seat a bot step should pick opening tickets for: a bot seat
+// first, then (only when a test drives every seat with bot steps) anyone.
+export const maybeSeatPickingTickets = (model: Model): Option.Option<number> =>
+  isPickingStartTickets(model)
+    ? Option.orElse(maybeBotPickingStartTickets(model), () =>
+        Array.findFirstIndex(model.players, player =>
+          Array.isReadonlyArrayNonEmpty(player.offeredTicketIds),
+        ),
+      )
+    : Option.none()
+
+// NOTE: How many of its offered tickets a seat must keep: 2 at the start, 1
+// after a draw, never more than it was offered.
+export const ticketsToKeep = (step: TurnStep, offeredCount: number): number =>
+  Math.min(
+    offeredCount,
+    step === 'ChoosingStartTickets'
+      ? START_TICKETS_TO_KEEP
+      : DRAWN_TICKETS_TO_KEEP,
+  )
 
 export const countCards = (hand: ReadonlyArray<Card>, card: Card): number =>
   Array.filter(hand, held => held === card).length
@@ -576,6 +615,73 @@ export const hasAnyMove = (model: Model, playerIndex: number): boolean =>
     Option.isSome(maybeClaimPayment(model, playerIndex, route.id)),
   )
 
+const keepTickets = (
+  model: Model,
+  step: TurnStep,
+  seatIndex: number,
+  keptIds: ReadonlyArray<string>,
+): ActionResult => {
+  const player = playerAt(model, seatIndex)
+  const offered = player.offeredTicketIds
+  if (Array.isReadonlyArrayEmpty(offered)) {
+    return reject('You have no tickets to choose from.')
+  }
+  const kept = Array.dedupe(keptIds)
+  if (!Array.every(kept, ticketId => Array.contains(offered, ticketId))) {
+    return reject('You can only keep tickets you were dealt.')
+  }
+  const minimum = ticketsToKeep(step, offered.length)
+  if (kept.length < minimum) {
+    return reject(
+      minimum === 1
+        ? 'Keep at least one ticket.'
+        : `Keep at least ${minimum} tickets.`,
+    )
+  }
+  const returned = Array.filter(
+    offered,
+    ticketId => !Array.contains(kept, ticketId),
+  )
+  const chosen = addSeatLog(
+    modifyFields(
+      modifyPlayer(model, seatIndex, held =>
+        modifyFields(held, {
+          ticketIds: ticketIds => Array.appendAll(ticketIds, kept),
+          offeredTicketIds: () => [],
+        }),
+      ),
+      { ticketPile: pile => Array.appendAll(pile, returned) },
+    ),
+    seatIndex,
+    `${player.name} kept ${ticketCount(kept.length)}.`,
+    `You kept ${ticketCount(kept.length)}${
+      Array.isReadonlyArrayNonEmpty(returned)
+        ? ` and put ${returned.length} back`
+        : ''
+    }.`,
+  )
+  if (step !== 'ChoosingStartTickets') {
+    return accept(endTurn(chosen))
+  }
+  const everyoneChose = Array.every(chosen.players, held =>
+    Array.isReadonlyArrayEmpty(held.offeredTicketIds),
+  )
+  return accept(
+    everyoneChose
+      ? addLog(
+          modifyFields(chosen, {
+            phase: () => Phase.Playing({ step: 'ChoosingAction' }),
+          }),
+          chosen.currentPlayerIndex,
+          `Everyone has their tickets. ${currentPlayer(chosen).name} goes first.`,
+        )
+      : chosen,
+  )
+}
+
+const ticketCount = (count: number): string =>
+  count === 1 ? '1 ticket' : `${count} tickets`
+
 const applyInStep = (
   model: Model,
   step: TurnStep,
@@ -583,6 +689,13 @@ const applyInStep = (
 ): ActionResult => {
   const playerIndex = model.currentPlayerIndex
   const player = currentPlayer(model)
+
+  if (step === 'ChoosingStartTickets' && action._tag !== 'KeptTickets') {
+    return reject('Pick your destination tickets first.')
+  }
+  if (step === 'KeepingTickets' && action._tag !== 'KeptTickets') {
+    return reject('Choose which tickets to keep first.')
+  }
 
   return PlayerAction.match<ActionResult>(action, {
     DrewFromDeck: () => {
@@ -697,31 +810,31 @@ const applyInStep = (
       if (step === 'DrawingSecondCard') {
         return reject('Draw your second card to finish this turn.')
       }
-      return Array.match(model.ticketPile, {
-        onEmpty: () => reject('No destination tickets are left.'),
-        onNonEmpty: ([ticketId, ...rest]) => {
-          const ticket = ticketById(ticketId)
-          const drawn = modifyFields(
-            modifyPlayer(model, playerIndex, held =>
-              modifyFields(held, {
-                ticketIds: ticketIds => Array.append(ticketIds, ticketId),
-              }),
-            ),
-            { ticketPile: () => rest },
-          )
-          return accept(
-            endTurn(
-              addSeatLog(
-                drawn,
-                playerIndex,
-                `${player.name} took a destination ticket.`,
-                `You took a ticket: ${cityById(ticket.from).name} to ${cityById(ticket.to).name}, ${ticket.points} points.`,
-              ),
-            ),
-          )
+      if (Array.isReadonlyArrayEmpty(model.ticketPile)) {
+        return reject('No destination tickets are left.')
+      }
+      const offered = Array.take(model.ticketPile, TICKET_OFFER_SIZE)
+      const drawn = modifyFields(
+        modifyPlayer(model, playerIndex, held =>
+          modifyFields(held, { offeredTicketIds: () => offered }),
+        ),
+        {
+          ticketPile: pile => Array.drop(pile, offered.length),
+          phase: () => Phase.Playing({ step: 'KeepingTickets' }),
         },
-      })
+      )
+      return accept(
+        addSeatLog(
+          drawn,
+          playerIndex,
+          `${player.name} drew ${ticketCount(offered.length)}.`,
+          `You drew ${ticketCount(offered.length)}. Keep at least one.`,
+        ),
+      )
     },
+
+    KeptTickets: ({ ticketIds }) =>
+      keepTickets(model, step, playerIndex, ticketIds),
 
     Passed: () => {
       if (step === 'ChoosingAction' && hasAnyMove(model, playerIndex)) {
@@ -764,6 +877,11 @@ export const actAs = (
 ): ActionResult => {
   if (Option.isNone(maybeTurnStep(model))) {
     return reject('The game is not in progress.')
+  }
+  if (isPickingStartTickets(model)) {
+    return action._tag === 'KeptTickets'
+      ? keepTickets(model, 'ChoosingStartTickets', seatIndex, action.ticketIds)
+      : reject('Pick your destination tickets first.')
   }
   if (seatIndex !== model.currentPlayerIndex) {
     return reject('It’s not your turn.')

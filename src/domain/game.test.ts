@@ -14,6 +14,7 @@ import {
   PlayerAction,
   applyAction,
   canDrawFromDeck,
+  actAs,
   localSeats,
   maybeTurnStep,
   newGame,
@@ -85,9 +86,108 @@ describe('a full game played by bots in every seat', () => {
   })
 })
 
+// Every seat keeps all its opening tickets, so play can begin.
+const keepAllStartTickets = (model: Model): Model =>
+  Array.reduce(model.players, model, (current, player, seatIndex) =>
+    accepted(
+      actAs(
+        current,
+        seatIndex,
+        PlayerAction.KeptTickets({ ticketIds: player.offeredTicketIds }),
+      ),
+    ),
+  )
+
+const dealt = (seed: number, seatCount: number): Model =>
+  keepAllStartTickets(newGame(seed, localSeats('You', seatCount)))
+
+describe('destination tickets', () => {
+  test('everyone is dealt 3 tickets, keeps at least 2, and the rest go to the bottom', () => {
+    const start = newGame(5, localSeats('You', 3))
+    expect(Option.getOrThrow(maybeTurnStep(start))).toBe('ChoosingStartTickets')
+    Array.forEach(start.players, player => {
+      expect(player.offeredTicketIds).toHaveLength(3)
+      expect(player.ticketIds).toHaveLength(0)
+    })
+    const [first, second, third] = start.players[1]!.offeredTicketIds
+    expect(
+      Result.isFailure(
+        actAs(start, 1, PlayerAction.KeptTickets({ ticketIds: [first!] })),
+      ),
+    ).toBe(true)
+    const afterSeat1 = accepted(
+      actAs(
+        start,
+        1,
+        PlayerAction.KeptTickets({ ticketIds: [first!, second!] }),
+      ),
+    )
+    expect(afterSeat1.players[1]!.ticketIds).toEqual([first, second])
+    expect(afterSeat1.players[1]!.offeredTicketIds).toEqual([])
+    expect(Array.last(afterSeat1.ticketPile)).toEqual(Option.some(third))
+    expect(Option.getOrThrow(maybeTurnStep(afterSeat1))).toBe(
+      'ChoosingStartTickets',
+    )
+    expect(
+      Result.isFailure(actAs(afterSeat1, 0, PlayerAction.DrewFromDeck())),
+    ).toBe(true)
+  })
+
+  test('play starts once every seat has picked', () => {
+    const start = dealt(5, 3)
+    expect(Option.getOrThrow(maybeTurnStep(start))).toBe('ChoosingAction')
+    expect(start.currentPlayerIndex).toBe(0)
+    Array.forEach(start.players, player =>
+      expect(player.ticketIds).toHaveLength(3),
+    )
+  })
+
+  test('a ticket draw shows 3, keeps at least 1, and ends the turn', () => {
+    const start = dealt(5, 3)
+    const pileBefore = start.ticketPile
+    const drawn = accepted(applyAction(start, PlayerAction.DrewTicket()))
+    const offered = drawn.players[0]!.offeredTicketIds
+    expect(offered).toEqual(Array.take(pileBefore, 3))
+    expect(Option.getOrThrow(maybeTurnStep(drawn))).toBe('KeepingTickets')
+    expect(drawn.currentPlayerIndex).toBe(0)
+    expect(
+      Result.isFailure(applyAction(drawn, PlayerAction.DrewFromDeck())),
+    ).toBe(true)
+    expect(
+      Result.isFailure(
+        applyAction(drawn, PlayerAction.KeptTickets({ ticketIds: [] })),
+      ),
+    ).toBe(true)
+    const kept = accepted(
+      applyAction(
+        drawn,
+        PlayerAction.KeptTickets({ ticketIds: [offered[1]!] }),
+      ),
+    )
+    expect(kept.players[0]!.ticketIds).toContain(offered[1])
+    expect(kept.players[0]!.offeredTicketIds).toEqual([])
+    expect(kept.currentPlayerIndex).toBe(1)
+    expect(kept.ticketPile).toEqual([
+      ...Array.drop(pileBefore, 3),
+      offered[0],
+      offered[2],
+    ])
+  })
+
+  test('you can only keep tickets you were offered', () => {
+    const start = newGame(5, localSeats('You', 3))
+    const notMine = start.players[1]!.offeredTicketIds
+    expect(
+      Result.isFailure(
+        actAs(start, 0, PlayerAction.KeptTickets({ ticketIds: notMine })),
+      ),
+    ).toBe(true)
+  })
+})
+
 describe('turn rules', () => {
   test('drawing from the deck twice ends the turn', () => {
-    const start = newGame(5, localSeats('You', 3))
+    const start = dealt(5, 3)
     expect(canDrawFromDeck(start)).toBe(true)
     const afterOne = accepted(applyAction(start, PlayerAction.DrewFromDeck()))
     expect(afterOne.currentPlayerIndex).toBe(0)
@@ -100,7 +200,7 @@ describe('turn rules', () => {
   })
 
   test('claiming a route you cannot afford is rejected with a reason', () => {
-    const start = newGame(5, localSeats('You', 3))
+    const start = dealt(5, 3)
     const longest = ROUTES.find(route => route.length === 4)!
     const after = applyAction(
       start,
@@ -110,7 +210,7 @@ describe('turn rules', () => {
   })
 
   test('an unknown route is rejected rather than crashing', () => {
-    const start = newGame(5, localSeats('You', 3))
+    const start = dealt(5, 3)
     const after = applyAction(
       start,
       PlayerAction.ClaimedRoute({ routeId: 'nope' }),
@@ -124,7 +224,7 @@ describe('turn rules', () => {
       expect(start.players).toHaveLength(seatCount)
       expect(cardsInPlay(start)).toBe(TOTAL_CARDS)
       Array.forEach(start.players, player =>
-        expect(player.ticketIds.length).toBeGreaterThan(0),
+        expect(player.offeredTicketIds).toHaveLength(3),
       )
     })
   })

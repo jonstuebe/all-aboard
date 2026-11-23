@@ -36,6 +36,7 @@ import {
   maybeRouteOwner,
   maybeTurnStep,
   maybeViewerPayment,
+  maybeViewerTicketOffer,
   viewerHasAnyMove,
 } from './domain/clientView'
 import { AnimateHandRow, HAND_CARD_DATA } from './handMotion'
@@ -359,23 +360,45 @@ const routeReadoutView = (model: Model, h: HtmlBuilder<Message>): Html =>
 
 // STATUS
 
+// NOTE: The viewer is "up" on their turn, and also while they have tickets
+// to pick (at the start everyone picks at once).
+const isViewerUp = (model: Model): boolean =>
+  isHumanTurn(model) || Option.isSome(maybeViewerTicketOffer(model))
+
 const statusText = (model: Model): string =>
   Phase.match<string>(model.phase, {
     Dealing: () => 'Shuffling the deck…',
     GameOver: () => 'Final results are in.',
     Playing: ({ step }) => {
+      const maybeOffer = maybeViewerTicketOffer(model)
+      if (Option.isSome(maybeOffer)) {
+        return maybeOffer.value.minimum === 1
+          ? 'Pick your tickets: keep at least one.'
+          : `Pick your destination tickets: keep at least ${maybeOffer.value.minimum}.`
+      }
+      if (step === 'ChoosingStartTickets') {
+        const picking = Array.filter(
+          model.players,
+          player => player.isPickingTickets,
+        )
+        return picking.length === 1
+          ? `Waiting for ${picking[0]!.name} to pick tickets…`
+          : 'Waiting for everyone to pick tickets…'
+      }
       if (!isHumanTurn(model)) {
         return Option.match(currentPlayer(model), {
           onNone: () => 'Waiting…',
           onSome: player =>
-            player.kind === 'Human'
-              ? `Waiting on ${player.name}…`
-              : `${player.name} is thinking…`,
+            step === 'KeepingTickets'
+              ? `${player.name} is picking tickets…`
+              : player.kind === 'Human'
+                ? `Waiting on ${player.name}…`
+                : `${player.name} is thinking…`,
         })
       }
       return step === 'DrawingSecondCard'
         ? 'Take one more card. A face-up wild can’t be your second card.'
-        : 'Your turn: draw two cards, claim a route, or take a ticket.'
+        : 'Your turn: draw two cards, claim a route, or take tickets.'
     },
   })
 
@@ -393,7 +416,7 @@ const headerView = (model: Model, h: HtmlBuilder<Message>): Html =>
       ),
       h.p(
         [
-          h.Class(`status${isHumanTurn(model) ? ' is-yours' : ''}`),
+          h.Class(`status${isViewerUp(model) ? ' is-yours' : ''}`),
           h.AriaLive('polite'),
         ],
         [statusText(model)],
@@ -705,6 +728,157 @@ const handView = (
 
 // TICKETS
 
+// NOTE: One ticket's face: the marker, route and status on the left, the
+// points on the torn-off stub. A kept/held ticket and an offered one share it.
+const ticketFace = (
+  ticketId: string,
+  marker: string,
+  state: string,
+  h: HtmlBuilder<Message>,
+): ReadonlyArray<Html> => {
+  const ticket = ticketById(ticketId)
+  return [
+    h.span(
+      [h.Class('ticket-main')],
+      [
+        h.span([h.Class('ticket-ring'), h.AriaHidden(true)], [marker]),
+        h.span(
+          [h.Class('ticket-kicker'), h.AriaHidden(true)],
+          ['Destination ticket'],
+        ),
+        h.span(
+          [h.Class('ticket-route')],
+          [
+            cityById(ticket.from).name,
+            h.span([h.Class('ticket-arrow'), h.AriaHidden(true)], [' ⟶ ']),
+            h.span([h.Class('sr-only')], [' to ']),
+            cityById(ticket.to).name,
+          ],
+        ),
+        h.span([h.Class('ticket-state')], [state]),
+      ],
+    ),
+    h.span(
+      [h.Class('ticket-stub')],
+      [
+        h.span([h.Class('ticket-points')], [`${ticket.points}`]),
+        h.span([h.Class('ticket-unit')], ['points']),
+      ],
+    ),
+  ]
+}
+
+const heldTicketList = (
+  model: Model,
+  player: Player,
+  h: HtmlBuilder<Message>,
+): Html =>
+  h.ul(
+    [h.Class('ticket-list')],
+    Array.map(player.ticketIds, ticketId => {
+      const isComplete = isViewerTicketComplete(model, ticketId)
+      return h.keyed('li')(
+        ticketId,
+        [h.Class(`ticket${isComplete ? ' is-done' : ''}`)],
+        ticketFace(
+          ticketId,
+          isComplete ? '✓' : '',
+          isComplete ? '✓ Connected' : 'Not yet connected',
+          h,
+        ),
+      )
+    }),
+  )
+
+const keepLabel = (keptCount: number, offeredCount: number): string => {
+  const returned = offeredCount - keptCount
+  if (returned === 0) {
+    return offeredCount === 1 ? 'Keep it' : `Keep all ${offeredCount}`
+  }
+  return `Keep ${keptCount} · put ${returned} back`
+}
+
+// NOTE: Picking tickets: every offered ticket starts kept, and a tap puts it
+// back. The keep button stays off until enough are kept.
+const ticketOfferView = (
+  model: Model,
+  player: Player,
+  offer: Readonly<{ ticketIds: ReadonlyArray<string>; minimum: number }>,
+  h: HtmlBuilder<Message>,
+): Html => {
+  const kept = Array.filter(
+    offer.ticketIds,
+    ticketId => !Array.contains(model.returnedTicketIds, ticketId),
+  )
+  const isEnough = kept.length >= offer.minimum
+  return h.section(
+    [h.Class('panel tickets is-picking'), h.AriaLabelledBy('tickets-title')],
+    [
+      h.div(
+        [h.Class('ticket-offer-head')],
+        [
+          h.h2([h.Id('tickets-title')], ['Pick your tickets']),
+          h.p(
+            [h.Class('ticket-offer-rule')],
+            [
+              offer.minimum === 1
+                ? 'Keep at least 1. Tap one to put it back on the bottom of the pile.'
+                : `Keep at least ${offer.minimum}. Tap one to put it back on the bottom of the pile.`,
+            ],
+          ),
+        ],
+      ),
+      h.ul(
+        [h.Class('ticket-list ticket-offer-list')],
+        Array.map(offer.ticketIds, ticketId => {
+          const isKept = Array.contains(kept, ticketId)
+          return h.keyed('li')(
+            ticketId,
+            [h.Class('ticket-offer-item')],
+            [
+              h.button(
+                [
+                  h.Class(`ticket ticket-option${isKept ? ' is-kept' : ''}`),
+                  h.Type('button'),
+                  h.AriaPressed(isKept ? 'true' : 'false'),
+                  h.OnClick(Message.ToggledOfferedTicket({ ticketId })),
+                ],
+                ticketFace(
+                  ticketId,
+                  isKept ? '✓' : '',
+                  isKept ? '✓ Keeping' : 'Putting back',
+                  h,
+                ),
+              ),
+            ],
+          )
+        }),
+      ),
+      h.button(
+        [
+          h.Class('btn btn-green ticket-keep'),
+          h.Type('button'),
+          h.Disabled(!isEnough),
+          h.OnClick(Message.ClickedKeepTickets({ ticketIds: kept })),
+        ],
+        [
+          isEnough
+            ? keepLabel(kept.length, offer.ticketIds.length)
+            : offer.minimum === 1
+              ? 'Keep at least 1'
+              : `Keep at least ${offer.minimum}`,
+        ],
+      ),
+      ...(Array.isReadonlyArrayNonEmpty(player.ticketIds)
+        ? [
+            h.h3([h.Class('ticket-held-label')], ['Tickets you hold']),
+            heldTicketList(model, player, h),
+          ]
+        : []),
+    ],
+  )
+}
+
 const ticketsView = (
   model: Model,
   player: Player,
@@ -715,83 +889,47 @@ const ticketsView = (
     Option.contains(maybeTurnStep(model), 'ChoosingAction') &&
     model.ticketPileCount > 0
 
-  return h.section(
-    [h.Class('panel tickets'), h.AriaLabelledBy('tickets-title')],
-    [
-      h.div(
-        [h.Class('panel-head')],
+  return Option.match(maybeViewerTicketOffer(model), {
+    onSome: offer => ticketOfferView(model, player, offer, h),
+    onNone: () =>
+      h.section(
+        [h.Class('panel tickets'), h.AriaLabelledBy('tickets-title')],
         [
-          h.h2([h.Id('tickets-title')], ['Your tickets']),
-          h.button(
+          h.div(
+            [h.Class('panel-head')],
             [
-              h.Class('btn btn-cream btn-compact ticket-take'),
-              h.Type('button'),
-              h.Disabled(!canDrawTicket),
-              h.OnClick(Message.ClickedDrawTicket()),
-            ],
-            [
-              h.span([h.Class('ticket-take-plus'), h.AriaHidden(true)], ['+']),
-              'Take a ticket',
-              h.span(
-                [h.Class('ticket-take-left')],
-                [`${model.ticketPileCount} left`],
+              h.h2([h.Id('tickets-title')], ['Your tickets']),
+              h.button(
+                [
+                  h.Class('btn btn-cream btn-compact ticket-take'),
+                  h.Type('button'),
+                  h.Disabled(!canDrawTicket),
+                  h.OnClick(Message.ClickedDrawTicket()),
+                ],
+                [
+                  h.span(
+                    [h.Class('ticket-take-plus'), h.AriaHidden(true)],
+                    ['+'],
+                  ),
+                  'Take tickets',
+                  h.span(
+                    [h.Class('ticket-take-left')],
+                    [`${model.ticketPileCount} left`],
+                  ),
+                ],
               ),
             ],
           ),
+          heldTicketList(model, player, h),
         ],
       ),
-      h.ul(
-        [h.Class('ticket-list')],
-        Array.map(player.ticketIds, ticketId => {
-          const ticket = ticketById(ticketId)
-          const isComplete = isViewerTicketComplete(model, ticketId)
-          return h.keyed('li')(
-            ticketId,
-            [h.Class(`ticket${isComplete ? ' is-done' : ''}`)],
-            [
-              h.span(
-                [h.Class('ticket-main')],
-                [
-                  h.span(
-                    [h.Class('ticket-ring'), h.AriaHidden(true)],
-                    [isComplete ? '✓' : ''],
-                  ),
-                  h.span(
-                    [h.Class('ticket-kicker'), h.AriaHidden(true)],
-                    ['Destination ticket'],
-                  ),
-                  h.span(
-                    [h.Class('ticket-route')],
-                    [
-                      cityById(ticket.from).name,
-                      h.span(
-                        [h.Class('ticket-arrow'), h.AriaHidden(true)],
-                        [' ⟶ '],
-                      ),
-                      h.span([h.Class('sr-only')], [' to ']),
-                      cityById(ticket.to).name,
-                    ],
-                  ),
-                  h.span(
-                    [h.Class('ticket-state')],
-                    [isComplete ? '✓ Connected' : 'Not yet connected'],
-                  ),
-                ],
-              ),
-              h.span(
-                [h.Class('ticket-stub')],
-                [
-                  h.span([h.Class('ticket-points')], [`${ticket.points}`]),
-                  h.span([h.Class('ticket-unit')], ['points']),
-                ],
-              ),
-            ],
-          )
-        }),
-      ),
-    ],
-  )
+  })
 }
+
+// NOTE: While the viewer has tickets to pick, the phone dock shows them no
+// matter which tab was picked.
+const shownDockTab = (model: Model): DockTab =>
+  Option.isSome(maybeViewerTicketOffer(model)) ? 'Tickets' : model.dockTab
 
 // LOG
 
@@ -942,13 +1080,13 @@ const dockTabsView = (
       h.OnMount(DragDockTab),
       h.Style({
         '--segment-count': String(DOCK_TABS.length),
-        '--picked': String(Math.max(0, DOCK_TABS.indexOf(model.dockTab))),
+        '--picked': String(Math.max(0, DOCK_TABS.indexOf(shownDockTab(model)))),
       }),
     ],
     [
       h.span([h.Class('dock-tab-thumb'), h.AriaHidden(true)]),
       ...Array.map(DOCK_TABS, tab => {
-        const isOn = model.dockTab === tab
+        const isOn = shownDockTab(model) === tab
         return h.button(
           [
             h.Class(`dock-tab${isOn ? ' is-on' : ''}`),
@@ -1056,9 +1194,9 @@ const sidebarPanels = (
   })
 
 export const tableView = (model: Model, h: HtmlBuilder<Message>): Document => ({
-  title: tableTitle(isHumanTurn(model)),
+  title: tableTitle(isViewerUp(model)),
   body: h.div(
-    [h.Class(`app dock-${model.dockTab.toLowerCase()}`)],
+    [h.Class(`app dock-${shownDockTab(model).toLowerCase()}`)],
     [
       headerView(model, h),
       h.main(

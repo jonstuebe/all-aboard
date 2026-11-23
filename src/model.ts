@@ -25,6 +25,7 @@ export const Player = Schema.Struct({
   trains: Schema.Number,
   routePoints: Schema.Number,
   ticketIds: Schema.Array(Schema.String),
+  offeredTicketIds: Schema.Array(Schema.String),
 })
 export type Player = typeof Player.Type
 
@@ -34,7 +35,15 @@ export const Claim = Schema.Struct({
 })
 export type Claim = typeof Claim.Type
 
-export const TurnStep = Schema.Literals(['ChoosingAction', 'DrawingSecondCard'])
+// NOTE: ChoosingStartTickets is the opening, when every seat picks its
+// tickets at once. KeepingTickets is the current player choosing from a
+// ticket draw.
+export const TurnStep = Schema.Literals([
+  'ChoosingStartTickets',
+  'ChoosingAction',
+  'DrawingSecondCard',
+  'KeepingTickets',
+])
 export type TurnStep = typeof TurnStep.Type
 
 export const Standing = Schema.Struct({

@@ -17,6 +17,7 @@ export const TableUi = Schema.Struct({
   maybeHoveredRouteId: Schema.Option(Schema.String),
   maybeNotice: Schema.Option(Schema.String),
   dockTab: DockTab,
+  returnedTicketIds: Schema.Array(Schema.String),
 })
 export type TableUi = typeof TableUi.Type
 
@@ -24,6 +25,7 @@ export const emptyTableUi: TableUi = {
   maybeHoveredRouteId: Option.none(),
   maybeNotice: Option.none(),
   dockTab: 'Draw',
+  returnedTicketIds: [],
 }
 
 export const PingStatus = defineTaggedUnion({

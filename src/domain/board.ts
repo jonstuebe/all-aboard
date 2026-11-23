@@ -45,7 +45,12 @@ export const STARTING_HAND_SIZE = 4
 export const MARKET_SIZE = 5
 export const STARTING_TRAINS = 14
 export const FINAL_ROUND_TRAIN_THRESHOLD = 2
-export const STARTING_TICKETS = 2
+// NOTE: At the start everyone is dealt 3 tickets and keeps at least 2. A
+// ticket draw mid-game shows 3 and keeps at least 1. Whatever isn't kept goes
+// to the bottom of the ticket pile.
+export const TICKET_OFFER_SIZE = 3
+export const START_TICKETS_TO_KEEP = 2
+export const DRAWN_TICKETS_TO_KEEP = 1
 
 // CITIES
 
@@ -143,6 +148,19 @@ export const TICKETS: ReadonlyArray<Ticket> = [
   { id: 't9', from: 'dallas', to: 'newyork', points: 7 },
   { id: 't10', from: 'seattle', to: 'chicago', points: 5 },
   { id: 't11', from: 'losangeles', to: 'atlanta', points: 6 },
+  { id: 't12', from: 'seattle', to: 'newyork', points: 9 },
+  { id: 't13', from: 'seattle', to: 'dallas', points: 6 },
+  { id: 't14', from: 'helena', to: 'atlanta', points: 6 },
+  { id: 't15', from: 'helena', to: 'losangeles', points: 6 },
+  { id: 't16', from: 'helena', to: 'miami', points: 9 },
+  { id: 't17', from: 'chicago', to: 'miami', points: 6 },
+  { id: 't18', from: 'denver', to: 'newyork', points: 7 },
+  { id: 't19', from: 'newyork', to: 'miami', points: 5 },
+  { id: 't20', from: 'losangeles', to: 'miami', points: 8 },
+  { id: 't21', from: 'dallas', to: 'miami', points: 5 },
+  { id: 't22', from: 'denver', to: 'atlanta', points: 4 },
+  { id: 't23', from: 'chicago', to: 'newyork', points: 4 },
+  { id: 't24', from: 'losangeles', to: 'dallas', points: 4 },
 ]
 
 export const ticketById = (ticketId: string): Ticket =>

@@ -16,6 +16,10 @@ const humans = (seatCount: number) =>
 const advance = (model: Model, steps: number): Model =>
   Array.reduce(Array.range(1, steps), model, current => playBotStep(current))
 
+// Each seat picks its opening tickets (one bot step per seat).
+const dealt = (seed: number, seatCount: number): Model =>
+  advance(newGame(seed, humans(seatCount)), seatCount)
+
 const FORBIDDEN_KEYS = [
   'rngState',
   'deck',
@@ -50,9 +54,11 @@ describe('ClientView never leaks hidden information', () => {
         if (playerIndex === viewerIndex) {
           expect(player.hand).toEqual(real.hand)
           expect(player.ticketIds).toEqual(real.ticketIds)
+          expect(player.offeredTicketIds).toEqual(real.offeredTicketIds)
         } else {
           expect(player.hand).toEqual([])
           expect(player.ticketIds).toEqual([])
+          expect(player.offeredTicketIds).toEqual([])
         }
       })
       expect(view.deckCount).toBe(model.deck.length)
@@ -81,7 +87,7 @@ describe('ClientView never leaks hidden information', () => {
   })
 
   test('private log text reaches only the actor', () => {
-    const start = newGame(9, humans(3))
+    const start = dealt(9, 3)
     const drawn = Result.getOrThrow(
       actAs(start, 0, PlayerAction.DrewFromDeck()),
     )
@@ -95,9 +101,24 @@ describe('ClientView never leaks hidden information', () => {
   })
 })
 
+test('opening ticket offers stay private to their seat', () => {
+  const start = newGame(12, humans(3))
+  Array.forEach(Array.range(0, 2), viewerIndex => {
+    const view = projectView(start, viewerIndex)
+    Array.forEach(view.players, (player, playerIndex) => {
+      expect(player.isPickingTickets).toBe(true)
+      expect(player.offeredTicketIds).toEqual(
+        playerIndex === viewerIndex
+          ? start.players[playerIndex]!.offeredTicketIds
+          : [],
+      )
+    })
+  })
+})
+
 describe('actor check', () => {
   test('rejects a seat acting out of turn and leaves the game unchanged', () => {
-    const start = newGame(3, humans(3))
+    const start = dealt(3, 3)
     expect(start.currentPlayerIndex).toBe(0)
     Array.forEach([1, 2, 7, -1], seatIndex => {
       const result = actAs(start, seatIndex, PlayerAction.DrewFromDeck())
@@ -106,7 +127,7 @@ describe('actor check', () => {
   })
 
   test('accepts the current seat', () => {
-    const start = newGame(3, humans(3))
+    const start = dealt(3, 3)
     expect(Result.isSuccess(actAs(start, 0, PlayerAction.DrewFromDeck()))).toBe(
       true,
     )

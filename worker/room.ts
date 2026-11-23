@@ -9,6 +9,7 @@ import {
   actAs,
   handOffToBot,
   isBotTurn,
+  maybeTurnStep,
   newGame,
 } from '../src/domain/game'
 import { seatResult, type SeatResult } from '../src/domain/results'
@@ -721,9 +722,12 @@ const menuStatus = (room: Room, seatIndex: number): MenuStatus => {
   if (room.phase === 'Finished') {
     return 'Finished'
   }
-  return Option.exists(
-    room.maybeGame,
-    game => game.currentPlayerIndex === seatIndex,
+  return Option.exists(room.maybeGame, game =>
+    Option.contains(maybeTurnStep(game), 'ChoosingStartTickets')
+      ? Option.exists(Array.get(game.players, seatIndex), player =>
+          Array.isReadonlyArrayNonEmpty(player.offeredTicketIds),
+        )
+      : game.currentPlayerIndex === seatIndex,
   )
     ? 'YourTurn'
     : 'Waiting'

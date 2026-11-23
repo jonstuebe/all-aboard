@@ -1883,6 +1883,73 @@ button.card.deck:hover:not(:disabled) {
   stroke-width: 1;
 }
 
+/* Picking tickets: the offered tickets are buttons. A kept one is full
+   strength; one going back to the pile fades and is struck through. */
+.ticket-offer-head {
+  margin-bottom: 9px;
+}
+
+.ticket-offer-head h2,
+.ticket-held-label {
+  margin: 0;
+  color: var(--brass-light);
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-shadow: 0 1px 0 rgb(0 0 0 / 0.5);
+}
+
+.ticket-offer-rule {
+  margin: 3px 0 0;
+  color: var(--cream-muted);
+  font-size: 0.8125rem;
+  line-height: 1.35;
+}
+
+.ticket-offer-list {
+  margin-bottom: 10px;
+}
+
+.ticket-option {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    opacity 160ms var(--ease-out),
+    filter 160ms var(--ease-out);
+}
+
+.ticket-option:not(.is-kept) {
+  opacity: 0.5;
+  filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.4)) grayscale(0.5);
+}
+
+.ticket-option:not(.is-kept) .ticket-route {
+  text-decoration: line-through;
+  text-decoration-color: rgb(107 90 69 / 0.7);
+}
+
+.ticket-option:focus-visible {
+  outline: 2px solid var(--brass-light);
+  outline-offset: 2px;
+}
+
+.ticket-keep {
+  width: 100%;
+}
+
+.ticket-held-label {
+  margin: 14px 0 7px;
+  color: var(--cream-muted);
+  font-size: 0.75rem;
+}
+
 /* Tickets tab extras (option A). Only the phone dock shows them. */
 .ticket-ring,
 .ticket-take-plus {
@@ -3157,6 +3224,63 @@ button.card.deck:hover:not(:disabled) {
 
   .ticket-unit {
     display: none;
+  }
+}
+
+/* Phone ticket picking: a kept ticket's marker is a brass check, so it never
+   reads as "connected" (the green check). */
+@media (max-width: 640px), (orientation: landscape) and (max-height: 500px) {
+  .ticket-option.is-kept .ticket-ring {
+    border: 1px solid #55400f;
+    background: var(--brass-face);
+    color: var(--brass-ink);
+  }
+
+  .ticket-offer-list {
+    margin-bottom: 9px;
+  }
+}
+
+/* Sideways the column is short, so the keep button sits beside the heading
+   and the rule (already in the status line) is dropped. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .panel.tickets.is-picking {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 10px;
+  }
+
+  .panel.tickets.is-picking > * {
+    grid-column: 1 / -1;
+  }
+
+  .panel.tickets.is-picking .ticket-offer-head {
+    grid-column: 1;
+    grid-row: 1;
+    margin-bottom: 0;
+  }
+
+  .ticket-offer-rule {
+    display: none;
+  }
+
+  .panel.tickets.is-picking .ticket-keep {
+    grid-column: 2;
+    grid-row: 1;
+    width: auto;
+    min-height: 32px;
+    padding: 0 12px;
+    font-size: 0.875rem;
+  }
+
+  .panel.tickets.is-picking .ticket-offer-list {
+    margin: 8px 0 0;
+    gap: 6px;
+  }
+
+  .ticket-option {
+    min-height: 38px;
   }
 }
 

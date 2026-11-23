@@ -260,7 +260,9 @@ describe('game pushes', () => {
     guest.close()
     await new Promise(resolve => setTimeout(resolve, 50))
 
-    host.send(ClientMessage.TakeAction({ action: PlayerAction.DrewTicket() }))
+    host.send(ClientMessage.TakeAction({ action: PlayerAction.DrewFromDeck() }))
+    await nextMessage(host, 'first card')
+    host.send(ClientMessage.TakeAction({ action: PlayerAction.DrewFromDeck() }))
     const turn = await waitForNotice(guest.device, 'turn-')
     expect(turn.title).toBe('Your turn')
     host.close()
