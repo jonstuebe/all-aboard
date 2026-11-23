@@ -1,9 +1,14 @@
 // PROTOTYPE, throwaway (branch prototype/home-variants).
 // Question: what should the home screen (new-game card plus the menu below
-// it) look like? Five structurally different takes on the existing home
-// route, picked with `?variant=A`..`E` and the dev-only switcher.
-// They reuse the real Home model, inputs and Messages; only the rendered
-// subtree changes. Fold the winner into screens/home.ts and drop this file.
+// it) look like? Round 2: five takes on the existing home route, picked with
+// `?variant=` and the dev-only switcher. They reuse the real Home model,
+// inputs and Messages; only the rendered subtree changes. Fold the winner
+// into screens/home.ts and drop this file.
+//
+// Affordance rules for A, B, D and F (E is the round-1 baseline): every
+// tappable thing is a raised button (`hv-btn`), a field (`hv-field`) or a
+// segmented control (`hv-seg`), built by the helpers below so each variant
+// only re-themes them. Decoration never borrows those shapes.
 
 import { Array } from 'effect'
 import type { Html, HtmlBuilder } from 'foldkit/html'
@@ -17,9 +22,9 @@ import './homeVariants.prototype.css'
 export const HOME_VARIANTS = [
   { key: 'A', name: 'Departure board' },
   { key: 'B', name: 'Printed ticket' },
-  { key: 'C', name: 'Brass control panel' },
   { key: 'D', name: 'Timetable poster' },
   { key: 'E', name: 'Luggage tags' },
+  { key: 'F', name: 'Ticket departures' },
 ] as const
 
 export type VariantProps = Readonly<{
@@ -31,7 +36,7 @@ export type VariantProps = Readonly<{
 
 type H = HtmlBuilder<Message>
 
-// SHARED BITS (inputs only; each variant owns its layout)
+// SHARED INPUTS
 
 const nameInput = (
   inputs: HomeInputs,
@@ -78,32 +83,111 @@ const rest = (props: VariantProps): ReadonlyArray<Html> => [
   ...props.menu,
 ]
 
-// A · DEPARTURE BOARD
-// A dark split-flap board. Every way to start is a departure row with a
-// BOARD button; the bot count is a flap digit with − and +.
+// SHARED AFFORDANCES (round 2)
 
-const flap = (text: string, h: H, extra = ''): Html =>
-  h.span(
-    [h.Class(`hv-flaps ${extra}`)],
-    Array.map(text.split(''), char =>
-      h.span([h.Class('hv-flap')], [char === ' ' ? ' ' : char]),
-    ),
+const field = (h: H, label: string, input: Html, extra = ''): Html =>
+  h.label(
+    [h.Class(`hv-field ${extra}`)],
+    [h.span([h.Class('hv-field-label')], [label]), input],
   )
 
-const boardRow = (
+const nameField = (inputs: HomeInputs, h: H, label: string): Html =>
+  field(h, label, nameInput(inputs, h, 'hv-field-input', 'Your name'))
+
+const segmented = (inputs: HomeInputs, h: H, label: string): Html =>
+  h.div(
+    [h.Class('hv-seg-wrap')],
+    [
+      h.span([h.Class('hv-field-label')], [label]),
+      h.div(
+        [h.Class('hv-seg'), h.Role('group'), h.AriaLabel(label)],
+        Array.map(seatCounts, count =>
+          h.button(
+            [
+              h.Class(
+                `hv-seg-opt${count === inputs.seatCount ? ' is-on' : ''}`,
+              ),
+              h.Type('button'),
+              h.AriaPressed(String(count === inputs.seatCount)),
+              h.OnClick(Message.ClickedSeatCount({ count })),
+            ],
+            [String(count)],
+          ),
+        ),
+      ),
+    ],
+  )
+
+const startFriends = (home: Home, h: H, extra = ''): Html =>
+  h.button(
+    [
+      h.Class(`hv-btn is-friends ${extra}`),
+      h.Type('button'),
+      h.Disabled(isCreating(home)),
+      h.OnClick(Message.ClickedNewFriendGame()),
+    ],
+    [isCreating(home) ? 'Opening lobby…' : 'Start with friends'],
+  )
+
+const startBots = (h: H, extra = ''): Html =>
+  h.button(
+    [
+      h.Class(`hv-btn is-bots ${extra}`),
+      h.Type('button'),
+      h.OnClick(Message.ClickedNewBotGame()),
+    ],
+    ['Start with bots'],
+  )
+
+const joinForm = (
+  home: Home,
+  h: H,
+  label: string,
+  inputClass = 'hv-field-input is-code',
+): Html =>
+  h.form(
+    [h.Class('hv-join'), h.OnSubmit(Message.SubmittedJoinCode())],
+    [
+      field(h, label, codeInput(home, h, inputClass), 'is-grow'),
+      h.button([h.Class('hv-btn is-join'), h.Type('submit')], ['Join']),
+    ],
+  )
+
+// A · DEPARTURE BOARD (softened)
+// A warm walnut station board with a brass bezel. Split-flap letters appear
+// only in the heading and the invite-code field. Each way to play is one
+// calm departure: a time, a name, a line of detail, one button.
+
+const flap = (text: string, h: H): Html =>
+  h.span(
+    [h.Class('hv-flaps'), h.AriaHidden(true)],
+    Array.map(text.split(''), char => h.span([h.Class('hv-flap')], [char])),
+  )
+
+const departure = (
   h: H,
   time: string,
-  destination: Html,
-  platform: Html,
-  action: Html,
+  title: string,
+  detail: string,
+  body: ReadonlyArray<Html>,
 ): Html =>
   h.li(
-    [h.Class('hv-a-row')],
+    [h.Class('hv-a-dep')],
     [
-      h.span([h.Class('hv-a-time')], [time]),
-      h.span([h.Class('hv-a-dest')], [destination]),
-      h.span([h.Class('hv-a-plat')], [platform]),
-      h.span([h.Class('hv-a-go')], [action]),
+      h.div(
+        [h.Class('hv-a-dep-head')],
+        [
+          h.span([h.Class('hv-a-time')], [time]),
+          h.div(
+            [],
+            [
+              h.h3([h.Class('hv-a-dest')], [title]),
+              h.p([h.Class('hv-a-detail')], [detail]),
+            ],
+          ),
+        ],
+      ),
+      ...body,
     ],
   )
 
@@ -115,115 +199,38 @@ const variantA = (props: VariantProps, h: H): Html => {
       h.section(
         [h.Class('hv-a-board'), h.AriaLabel('New game')],
         [
-          h.div(
-            [h.Class('hv-a-head')],
-            [
-              flap('DEPARTURES', h, 'is-title'),
-              h.span([h.Class('hv-a-clock')], ['ALL ABOARD']),
-            ],
+          h.h2(
+            [h.Class('hv-a-title')],
+            [flap('Departures', h), h.span([h.Class('hv-sr')], ['Departures'])],
           ),
-          h.label(
-            [h.Class('hv-a-passenger')],
-            [
-              h.span([h.Class('hv-a-label')], ['Passenger']),
-              nameInput(inputs, h, 'hv-a-input', 'YOUR NAME'),
-            ],
-          ),
-          h.div(
-            [h.Class('hv-a-cols'), h.AriaHidden(true)],
-            [
-              h.span([], ['Dep']),
-              h.span([], ['Service']),
-              h.span([], ['Seats']),
-              h.span([], ['']),
-            ],
-          ),
+          nameField(inputs, h, 'Your name'),
           h.ul(
-            [h.Class('hv-a-rows')],
+            [h.Class('hv-a-deps')],
             [
-              boardRow(
+              departure(
                 h,
-                'NOW',
-                h.span(
-                  [],
-                  [
-                    h.strong([], ['Friends Express']),
-                    h.small([], ['Opens a lobby, share the code']),
-                  ],
-                ),
-                h.span([], ['2–5']),
-                h.button(
-                  [
-                    h.Class('hv-a-board-btn is-primary'),
-                    h.Type('button'),
-                    h.Disabled(isCreating(home)),
-                    h.OnClick(Message.ClickedNewFriendGame()),
-                  ],
-                  [isCreating(home) ? 'OPENING' : 'BOARD'],
-                ),
+                'Now',
+                'With friends',
+                'Open a lobby, then share the invite code.',
+                [startFriends(home, h)],
               ),
-              boardRow(
+              departure(
                 h,
-                'NOW',
-                h.span(
-                  [],
-                  [
-                    h.strong([], ['Bot Local']),
-                    h.small([], ['Plays on this device, offline too']),
-                  ],
-                ),
-                h.span(
-                  [h.Class('hv-a-stepper')],
-                  [
-                    h.button(
-                      [
-                        h.Class('hv-a-step'),
-                        h.Type('button'),
-                        h.AriaLabel('Fewer players'),
-                        h.OnClick(
-                          Message.ClickedSeatCount({
-                            count: inputs.seatCount - 1,
-                          }),
-                        ),
-                      ],
-                      ['−'],
-                    ),
-                    flap(String(inputs.seatCount), h, 'is-digit'),
-                    h.button(
-                      [
-                        h.Class('hv-a-step'),
-                        h.Type('button'),
-                        h.AriaLabel('More players'),
-                        h.OnClick(
-                          Message.ClickedSeatCount({
-                            count: inputs.seatCount + 1,
-                          }),
-                        ),
-                      ],
-                      ['+'],
-                    ),
-                  ],
-                ),
-                h.button(
-                  [
-                    h.Class('hv-a-board-btn'),
-                    h.Type('button'),
-                    h.OnClick(Message.ClickedNewBotGame()),
-                  ],
-                  ['BOARD'],
-                ),
+                'Now',
+                'With bots',
+                'Plays on this device, even offline.',
+                [segmented(inputs, h, 'Players'), startBots(h)],
               ),
             ],
           ),
-          h.form(
-            [h.Class('hv-a-join'), h.OnSubmit(Message.SubmittedJoinCode())],
+          h.div(
+            [h.Class('hv-a-connect')],
             [
-              h.span([h.Class('hv-a-label')], ['Connecting service']),
-              codeInput(home, h, 'hv-a-input is-code'),
-              h.button([h.Class('hv-a-board-btn'), h.Type('submit')], ['JOIN']),
+              h.h3([h.Class('hv-a-dest')], ['Joining a friend?']),
+              joinForm(home, h, 'Invite code', 'hv-field-input is-code is-flap'),
             ],
           ),
-          createError(home, h, 'hv-a-error'),
+          createError(home, h, 'hv-error'),
         ],
       ),
       h.div([h.Class('hv-rest')], rest(props)),
@@ -231,9 +238,10 @@ const variantA = (props: VariantProps, h: H): Html => {
   )
 }
 
-// B · PRINTED TICKET
-// A paper ticket you fill in: passenger line, then two tear-off stubs, one
-// per way to play, and a small "transfer" stub for an invite code.
+// B · PRINTED TICKET (clear affordances)
+// The paper ticket from round 1, now with an inset name field, raised
+// buttons in each stub and a segmented player count. Class names are
+// plain printed text; nothing decorative is boxed or stamped.
 
 const variantB = (props: VariantProps, h: H): Html => {
   const { home, inputs } = props
@@ -250,99 +258,44 @@ const variantB = (props: VariantProps, h: H): Html => {
               h.span([h.Class('hv-b-serial')], ['No. 0001']),
             ],
           ),
-          h.h2([h.Class('hv-b-title')], ['Passenger Ticket']),
-          h.label(
-            [h.Class('hv-b-line')],
+          h.div(
+            [h.Class('hv-b-body')],
             [
-              h.span([h.Class('hv-b-caption')], ['Issued to']),
-              nameInput(inputs, h, 'hv-b-write', 'write your name'),
+              h.h2([h.Class('hv-b-title')], ['Passenger ticket']),
+              nameField(inputs, h, 'Passenger name'),
             ],
           ),
           h.div(
-            [h.Class('hv-b-stubs')],
+            [h.Class('hv-b-stub')],
             [
-              h.div(
-                [h.Class('hv-b-stub')],
-                [
-                  h.span([h.Class('hv-b-class')], ['First class']),
-                  h.strong([h.Class('hv-b-route')], ['With friends']),
-                  h.p(
-                    [h.Class('hv-b-fine')],
-                    ['Valid for one lobby. Share the code printed on it.'],
-                  ),
-                  h.button(
-                    [
-                      h.Class('hv-b-stamp is-red'),
-                      h.Type('button'),
-                      h.Disabled(isCreating(home)),
-                      h.OnClick(Message.ClickedNewFriendGame()),
-                    ],
-                    [isCreating(home) ? 'Issuing…' : 'Issue ticket'],
-                  ),
-                ],
+              h.p([h.Class('hv-b-class')], ['First class']),
+              h.h3([h.Class('hv-b-route')], ['With friends']),
+              h.p(
+                [h.Class('hv-b-fine')],
+                ['Opens a lobby. Share the code printed on it.'],
               ),
-              h.div(
-                [h.Class('hv-b-stub')],
-                [
-                  h.span([h.Class('hv-b-class')], ['Second class']),
-                  h.strong([h.Class('hv-b-route')], ['With bots']),
-                  h.fieldset(
-                    [h.Class('hv-b-boxes')],
-                    [
-                      h.legend([h.Class('hv-b-fine')], ['Party of (tick one)']),
-                      ...Array.map(seatCounts, count =>
-                        h.button(
-                          [
-                            h.Class(
-                              `hv-b-box${count === inputs.seatCount ? ' is-ticked' : ''}`,
-                            ),
-                            h.Type('button'),
-                            h.AriaPressed(String(count === inputs.seatCount)),
-                            h.OnClick(Message.ClickedSeatCount({ count })),
-                          ],
-                          [
-                            h.span(
-                              [h.Class('hv-b-tick')],
-                              [count === inputs.seatCount ? '✕' : ''],
-                            ),
-                            String(count),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  h.button(
-                    [
-                      h.Class('hv-b-stamp'),
-                      h.Type('button'),
-                      h.OnClick(Message.ClickedNewBotGame()),
-                    ],
-                    ['Issue ticket'],
-                  ),
-                ],
-              ),
+              startFriends(home, h),
             ],
-          ),
-          createError(home, h, 'hv-b-error'),
-        ],
-      ),
-      h.form(
-        [h.Class('hv-b-transfer'), h.OnSubmit(Message.SubmittedJoinCode())],
-        [
-          h.span(
-            [h.Class('hv-b-caption')],
-            ['Transfer · have a ticket number?'],
           ),
           h.div(
-            [h.Class('hv-b-transfer-row')],
+            [h.Class('hv-b-stub')],
             [
-              codeInput(home, h, 'hv-b-write is-code'),
-              h.button(
-                [h.Class('hv-b-stamp is-small'), h.Type('submit')],
-                ['Join'],
-              ),
+              h.p([h.Class('hv-b-class')], ['Second class']),
+              h.h3([h.Class('hv-b-route')], ['With bots']),
+              h.p([h.Class('hv-b-fine')], ['Plays on this device, offline too.']),
+              segmented(inputs, h, 'Players'),
+              startBots(h),
             ],
           ),
+          h.div(
+            [h.Class('hv-b-stub is-transfer')],
+            [
+              h.p([h.Class('hv-b-class')], ['Transfer']),
+              h.h3([h.Class('hv-b-route')], ['Join a friend']),
+              joinForm(home, h, 'Invite code'),
+            ],
+          ),
+          createError(home, h, 'hv-error'),
         ],
       ),
       h.div([h.Class('hv-rest')], rest(props)),
@@ -350,120 +303,37 @@ const variantB = (props: VariantProps, h: H): Html => {
   )
 }
 
-// C · BRASS CONTROL PANEL
-// A locomotive console: engraved nameplate, a rotary selector for the bot
-// count, and three big round push-buttons as the primary controls.
+// D · TIMETABLE POSTER (clear affordances)
+// A letterpress poster: big headline, then services as stacked entries
+// separated by heavy rules, each ending in a full-width raised button.
+// Your name moves up to the top as a proper field.
 
-const variantC = (props: VariantProps, h: H): Html => {
-  const { home, inputs } = props
-  return h.div(
-    [h.Class('hv hv-c')],
+const service = (
+  h: H,
+  number: string,
+  title: string,
+  detail: string,
+  body: ReadonlyArray<Html>,
+): Html =>
+  h.section(
+    [h.Class('hv-d-service')],
     [
-      h.section(
-        [h.Class('hv-c-panel'), h.AriaLabel('New game')],
+      h.div(
+        [h.Class('hv-d-service-head')],
         [
-          h.span([h.Class('hv-c-screw is-tl'), h.AriaHidden(true)]),
-          h.span([h.Class('hv-c-screw is-tr'), h.AriaHidden(true)]),
-          h.span([h.Class('hv-c-screw is-bl'), h.AriaHidden(true)]),
-          h.span([h.Class('hv-c-screw is-br'), h.AriaHidden(true)]),
-          h.label(
-            [h.Class('hv-c-plate')],
-            [
-              h.span([h.Class('hv-c-engrave')], ['Engineer']),
-              nameInput(inputs, h, 'hv-c-plate-input', 'Your name'),
-            ],
-          ),
+          h.span([h.Class('hv-d-number')], [number]),
           h.div(
-            [h.Class('hv-c-dial-wrap')],
+            [],
             [
-              h.div(
-                [
-                  h.Class(`hv-c-dial is-turn-${inputs.seatCount}`),
-                  h.Role('group'),
-                  h.AriaLabel('Players with bots'),
-                ],
-                [
-                  h.span([h.Class('hv-c-knob'), h.AriaHidden(true)]),
-                  ...Array.map(seatCounts, count =>
-                    h.button(
-                      [
-                        h.Class(
-                          `hv-c-stop is-${count}${count === inputs.seatCount ? ' is-on' : ''}`,
-                        ),
-                        h.Type('button'),
-                        h.AriaPressed(String(count === inputs.seatCount)),
-                        h.AriaLabel(`${count} players`),
-                        h.OnClick(Message.ClickedSeatCount({ count })),
-                      ],
-                      [String(count)],
-                    ),
-                  ),
-                ],
-              ),
-              h.span([h.Class('hv-c-engrave')], ['Crew with bots']),
+              h.h3([h.Class('hv-d-name')], [title]),
+              h.p([h.Class('hv-d-detail')], [detail]),
             ],
           ),
-          h.div(
-            [h.Class('hv-c-buttons')],
-            [
-              h.button(
-                [
-                  h.Class('hv-c-push is-red'),
-                  h.Type('button'),
-                  h.Disabled(isCreating(home)),
-                  h.OnClick(Message.ClickedNewFriendGame()),
-                ],
-                [
-                  h.span([h.Class('hv-c-cap')], []),
-                  h.span(
-                    [h.Class('hv-c-push-label')],
-                    [isCreating(home) ? 'Opening…' : 'Friends'],
-                  ),
-                ],
-              ),
-              h.button(
-                [
-                  h.Class('hv-c-push is-green'),
-                  h.Type('button'),
-                  h.OnClick(Message.ClickedNewBotGame()),
-                ],
-                [
-                  h.span([h.Class('hv-c-cap')], []),
-                  h.span(
-                    [h.Class('hv-c-push-label')],
-                    [`Bots · ${inputs.seatCount}`],
-                  ),
-                ],
-              ),
-            ],
-          ),
-          h.form(
-            [h.Class('hv-c-join'), h.OnSubmit(Message.SubmittedJoinCode())],
-            [
-              h.span([h.Class('hv-c-engrave')], ['Invite code']),
-              h.div(
-                [h.Class('hv-c-join-row')],
-                [
-                  codeInput(home, h, 'hv-c-lcd'),
-                  h.button(
-                    [h.Class('hv-c-toggle'), h.Type('submit')],
-                    ['Join'],
-                  ),
-                ],
-              ),
-            ],
-          ),
-          createError(home, h, 'hv-c-error'),
         ],
       ),
-      h.div([h.Class('hv-rest')], rest(props)),
+      ...body,
     ],
   )
-}
-
-// D · TIMETABLE POSTER
-// A printed poster: big headline, then a timetable table where each service
-// is a row and booking is an inline link. The name sits in the small print.
 
 const variantD = (props: VariantProps, h: H): Html => {
   const { home, inputs } = props
@@ -473,141 +343,23 @@ const variantD = (props: VariantProps, h: H): Html => {
       h.section(
         [h.Class('hv-d-poster'), h.AriaLabel('New game')],
         [
-          h.p(
-            [h.Class('hv-d-kicker')],
-            ['Winter timetable · until further notice'],
-          ),
+          h.p([h.Class('hv-d-kicker')], ['Winter timetable']),
           h.h2(
             [h.Class('hv-d-headline')],
-            [
-              'All Aboard!',
-              h.br([]),
-              h.span([], ['Services from this station']),
-            ],
+            ['All Aboard!', h.span([], ['Services from this station'])],
           ),
-          h.table(
-            [h.Class('hv-d-table')],
-            [
-              h.thead(
-                [],
-                [
-                  h.tr(
-                    [],
-                    [
-                      h.th([], ['Service']),
-                      h.th([], ['Calling at']),
-                      h.th([], ['']),
-                    ],
-                  ),
-                ],
-              ),
-              h.tbody(
-                [],
-                [
-                  h.tr(
-                    [],
-                    [
-                      h.td(
-                        [],
-                        [
-                          h.strong([], ['The Friends’ Express']),
-                          h.small([], ['Opens a lobby; share the code']),
-                        ],
-                      ),
-                      h.td([], ['Your friends, 2 to 5']),
-                      h.td(
-                        [],
-                        [
-                          h.button(
-                            [
-                              h.Class('hv-d-book is-main'),
-                              h.Type('button'),
-                              h.Disabled(isCreating(home)),
-                              h.OnClick(Message.ClickedNewFriendGame()),
-                            ],
-                            [isCreating(home) ? 'Booking…' : 'Book →'],
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  h.tr(
-                    [],
-                    [
-                      h.td(
-                        [],
-                        [
-                          h.strong([], ['The Bot Local']),
-                          h.small([], ['Stops at every station; offline']),
-                        ],
-                      ),
-                      h.td(
-                        [],
-                        [
-                          h.span(
-                            [
-                              h.Class('hv-d-counts'),
-                              h.Role('group'),
-                              h.AriaLabel('Players with bots'),
-                            ],
-                            Array.map(seatCounts, count =>
-                              h.button(
-                                [
-                                  h.Class(
-                                    `hv-d-count${count === inputs.seatCount ? ' is-on' : ''}`,
-                                  ),
-                                  h.Type('button'),
-                                  h.AriaPressed(
-                                    String(count === inputs.seatCount),
-                                  ),
-                                  h.OnClick(
-                                    Message.ClickedSeatCount({ count }),
-                                  ),
-                                ],
-                                [String(count)],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      h.td(
-                        [],
-                        [
-                          h.button(
-                            [
-                              h.Class('hv-d-book'),
-                              h.Type('button'),
-                              h.OnClick(Message.ClickedNewBotGame()),
-                            ],
-                            ['Book →'],
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ],
-          ),
-          h.form(
-            [h.Class('hv-d-join'), h.OnSubmit(Message.SubmittedJoinCode())],
-            [
-              h.span(
-                [h.Class('hv-d-join-lead')],
-                ['Connecting passengers: enter your service number'],
-              ),
-              codeInput(home, h, 'hv-d-input is-code'),
-              h.button([h.Class('hv-d-book'), h.Type('submit')], ['Join →']),
-            ],
-          ),
-          createError(home, h, 'hv-d-error'),
-          h.label(
-            [h.Class('hv-d-small')],
-            [
-              h.span([], ['Tickets issued in the name of']),
-              nameInput(inputs, h, 'hv-d-input', 'your name'),
-            ],
-          ),
+          nameField(inputs, h, 'Travelling as'),
+          service(h, '1', 'The Friends’ Express', 'Opens a lobby. Share the code.', [
+            startFriends(home, h),
+          ]),
+          service(h, '2', 'The Bot Local', 'Stops at every station. Works offline.', [
+            segmented(inputs, h, 'Players'),
+            startBots(h),
+          ]),
+          service(h, '3', 'Connecting service', 'Got an invite code from a friend?', [
+            joinForm(home, h, 'Invite code'),
+          ]),
+          createError(home, h, 'hv-error'),
         ],
       ),
       h.div([h.Class('hv-rest')], rest(props)),
@@ -729,6 +481,81 @@ const variantE = (props: VariantProps, h: H): Html => {
   )
 }
 
+// F · TICKET DEPARTURES (hybrid)
+// B's cream ticket paper holding A's departure list: a departures header,
+// the passenger field, then each way to play as a row with a platform,
+// a name, a line of detail and one big raised button. The clearest
+// affordances of the set: 52px buttons with an arrow, labels above fields.
+
+const platformRow = (
+  h: H,
+  platform: string,
+  title: string,
+  detail: string,
+  body: ReadonlyArray<Html>,
+): Html =>
+  h.li(
+    [h.Class('hv-f-row')],
+    [
+      h.div(
+        [h.Class('hv-f-row-head')],
+        [
+          h.span(
+            [h.Class('hv-f-plat')],
+            [h.span([], ['Platform']), h.strong([], [platform])],
+          ),
+          h.div(
+            [],
+            [
+              h.h3([h.Class('hv-f-dest')], [title]),
+              h.p([h.Class('hv-f-detail')], [detail]),
+            ],
+          ),
+        ],
+      ),
+      ...body,
+    ],
+  )
+
+const variantF = (props: VariantProps, h: H): Html => {
+  const { home, inputs } = props
+  return h.div(
+    [h.Class('hv hv-f')],
+    [
+      h.section(
+        [h.Class('hv-f-ticket'), h.AriaLabel('New game')],
+        [
+          h.div(
+            [h.Class('hv-f-head')],
+            [
+              h.h2([h.Class('hv-f-title')], ['Departures']),
+              h.span([h.Class('hv-f-sub')], ['All Aboard Railway Co.']),
+            ],
+          ),
+          h.div([h.Class('hv-f-passenger')], [nameField(inputs, h, 'Passenger name')]),
+          h.ul(
+            [h.Class('hv-f-rows')],
+            [
+              platformRow(h, '1', 'With friends', 'Open a lobby and share the invite code.', [
+                startFriends(home, h),
+              ]),
+              platformRow(h, '2', 'With bots', 'Plays on this device, even offline.', [
+                segmented(inputs, h, 'Players'),
+                startBots(h),
+              ]),
+              platformRow(h, '3', 'Join a friend', 'Type the code they sent you.', [
+                joinForm(home, h, 'Invite code'),
+              ]),
+            ],
+          ),
+          createError(home, h, 'hv-error'),
+        ],
+      ),
+      h.div([h.Class('hv-rest')], rest(props)),
+    ],
+  )
+}
+
 export const homeVariantView = (
   key: string,
   props: VariantProps,
@@ -737,12 +564,12 @@ export const homeVariantView = (
   switch (key) {
     case 'B':
       return variantB(props, h)
-    case 'C':
-      return variantC(props, h)
     case 'D':
       return variantD(props, h)
     case 'E':
       return variantE(props, h)
+    case 'F':
+      return variantF(props, h)
     default:
       return variantA(props, h)
   }
