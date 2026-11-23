@@ -1883,7 +1883,7 @@ button.card.deck:hover:not(:disabled) {
   stroke-width: 1;
 }
 
-/* Draw tab extras (option A). Only the upright phone dock shows them. */
+/* Draw tab extras (option A). Only the phone dock shows them. */
 .draw-progress,
 .market-label,
 .card-tag,
@@ -2821,8 +2821,9 @@ button.card.deck:hover:not(:disabled) {
 
 /* Upright Draw tab (option A): "Take 2 cards" with a dot per draw, the five
    face-up cards in one row, then an "or" and the deck as one wide button,
-   so it never reads as a sixth card. */
-@media (max-width: 640px) {
+   so it never reads as a sixth card. Sideways phones use it too, in the
+   right-hand column. */
+@media (max-width: 640px), (orientation: landscape) and (max-height: 500px) {
   .panel.market .panel-head {
     display: none;
   }
@@ -3141,6 +3142,45 @@ button.card.deck:hover:not(:disabled) {
 
   .card-name {
     justify-content: center;
+    font-size: 0.75rem;
+  }
+
+  /* The Draw tab's option A layout, squeezed for the short right column. */
+  .market-label {
+    display: none;
+  }
+
+  .draw-progress {
+    margin-bottom: 6px;
+  }
+
+  .draw-progress-title {
+    font-size: 0.9375rem;
+  }
+
+  .panel.market .card .car-art {
+    margin-top: 12px;
+  }
+
+  .panel.market .card-row > li:last-child {
+    gap: 4px;
+    margin-top: 8px;
+  }
+
+  .card.deck {
+    padding-block: 5px;
+  }
+
+  .card.deck .card-back {
+    width: 52px;
+    height: 32px;
+  }
+
+  .deck-words strong {
+    font-size: 0.9375rem;
+  }
+
+  .deck-words span {
     font-size: 0.75rem;
   }
 
