@@ -30,6 +30,10 @@ export const Message = defineMessageUnion({
   CompletedMenuPing: { maybeReason: Schema.Option(Schema.String) },
   TickedClock: { now: Schema.Number },
 
+  // PROTOTYPE (home variants)
+  SteppedHomeVariant: { step: Schema.Number },
+  CompletedReplaceVariantUrl: {},
+
   // NOTIFICATIONS
   CheckedNotifications: { status: NotificationStatus },
   ClickedEnableNotifications: {},

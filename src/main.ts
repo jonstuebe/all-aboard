@@ -17,7 +17,7 @@ import {
   type Update,
 } from 'foldkit'
 import type { Document, HtmlBuilder } from 'foldkit/html'
-import { UrlRequest, load, pushUrl } from 'foldkit/navigation'
+import { UrlRequest, load, pushUrl, replaceUrl } from 'foldkit/navigation'
 import { defineTaggedUnion } from 'foldkit/schema'
 import { modifyFields } from 'foldkit/struct'
 import { toString as urlToString } from 'foldkit/url'
@@ -78,13 +78,24 @@ import {
   normalizeCode,
 } from './protocol'
 import {
+  isTypingTarget,
+  prototypeSwitcher,
+  stepVariant,
+  variantFromSearch,
+} from './prototypeSwitcher'
+import {
   CheckNotifications,
   EnableNotifications,
   NotificationStatus,
   notificationsView,
 } from './push'
 import { AppRoute, gamePath, urlToAppRoute } from './route'
+import { screenFrame } from './screens/frame'
 import { CreateState, Home, emptyHome, homeView } from './screens/home'
+import {
+  HOME_VARIANTS,
+  homeVariantView,
+} from './screens/homeVariants.prototype'
 import { lobbyView, messageScreen } from './screens/lobby'
 import { menuView } from './screens/menu'
 import { TableMode, makeTable } from './table'
@@ -110,6 +121,7 @@ export const Model = Schema.Struct({
   menu: MenuState,
   now: Schema.Number,
   notifications: NotificationStatus,
+  homeVariant: Schema.String,
 })
 export type Model = typeof Model.Type
 
@@ -147,6 +159,16 @@ export const WaitForBot = Command.define('WaitForBot', {
   execute: ({ gameId, turnNumber, step }) =>
     Effect.sleep(BOT_THINKING_TIME).pipe(
       Effect.as(Message.CompletedWaitForBot({ gameId, turnNumber, step })),
+    ),
+})
+
+// PROTOTYPE: keeps ?variant= in the URL so a variant survives a reload.
+export const ReplaceVariantUrl = Command.define('ReplaceVariantUrl', {
+  args: { variant: Schema.String },
+  messages: [Message.CompletedReplaceVariantUrl],
+  execute: ({ variant }) =>
+    replaceUrl(`/?variant=${variant}`).pipe(
+      Effect.as(Message.CompletedReplaceVariantUrl()),
     ),
 })
 
@@ -444,6 +466,7 @@ export const update = (model: Model, message: Message) =>
         model: modifyFields(model, {
           route: () => route,
           screen: () => screen,
+          homeVariant: () => variantFromSearch(HOME_VARIANTS, url.search),
         }),
         commands: screen._tag === 'Home' ? [fetchMenu(model)] : [],
       }
@@ -586,6 +609,19 @@ export const update = (model: Model, message: Message) =>
     }),
 
     CompletedMenuPing: () => ({ model, commands: [fetchMenu(model)] }),
+
+    SteppedHomeVariant: ({ step }) => {
+      if (model.screen._tag !== 'Home') {
+        return { model }
+      }
+      const variant = stepVariant(HOME_VARIANTS, model.homeVariant, step)
+      return {
+        model: modifyFields(model, { homeVariant: () => variant }),
+        commands: [ReplaceVariantUrl({ variant })],
+      }
+    },
+
+    CompletedReplaceVariantUrl: () => ({ model }),
 
     TickedClock: ({ now }) => ({
       model: modifyFields(model, { now: () => now }),
@@ -828,6 +864,7 @@ export const init: Runtime.RoutingApplicationInit<Model, Message, Flags> = (
     menu: MenuState.Loading(),
     now: initialFlags.now,
     notifications: NotificationStatus.Checking(),
+    homeVariant: variantFromSearch(HOME_VARIANTS, url.search),
   }
   const screen = screenForRoute(base, route)
   return {
@@ -885,6 +922,26 @@ export const subscriptions = Subscription.make<
         ),
       ),
     ),
+  ),
+  prototypeVariantKeys: Subscription.persistentEntry(
+    Dom.streamFromEventFilterMap({
+      target: document,
+      type: 'keydown',
+      filterMapEvent: keyboardEvent =>
+        import.meta.env.DEV &&
+        !keyboardEvent.metaKey &&
+        !keyboardEvent.ctrlKey &&
+        !keyboardEvent.altKey &&
+        !isTypingTarget(keyboardEvent.target) &&
+        (keyboardEvent.key === 'ArrowLeft' ||
+          keyboardEvent.key === 'ArrowRight')
+          ? Option.some(
+              Message.SteppedHomeVariant({
+                step: keyboardEvent.key === 'ArrowLeft' ? -1 : 1,
+              }),
+            )
+          : Option.none(),
+    }),
   ),
   keyboardShortcuts: Subscription.persistentEntry(
     Dom.streamFromEventFilterMap({
@@ -968,18 +1025,31 @@ const onlineView = (
 
 export const view = (model: Model, h: HtmlBuilder<Message>): Document =>
   Screen.match<Document>(model.screen, {
-    Home: ({ home }) => ({
-      title: 'All Aboard',
-      body: homeView(
-        home,
-        { playerName: model.playerName, seatCount: model.seatCount },
-        [
-          notificationsView(model.notifications, h),
-          ...menuView(model.menu, { now: model.now }, h),
-        ],
-        h,
-      ),
-    }),
+    Home: ({ home }) => {
+      const inputs = {
+        playerName: model.playerName,
+        seatCount: model.seatCount,
+      }
+      const notifications = notificationsView(model.notifications, h)
+      const menu = menuView(model.menu, { now: model.now }, h)
+      // PROTOTYPE: dev builds render the picked home variant and the switcher.
+      return {
+        title: 'All Aboard',
+        body: import.meta.env.DEV
+          ? screenFrame(
+              [
+                homeVariantView(
+                  model.homeVariant,
+                  { home, inputs, notifications, menu },
+                  h,
+                ),
+                prototypeSwitcher(HOME_VARIANTS, model.homeVariant, h),
+              ],
+              h,
+            )
+          : homeView(home, inputs, [notifications, ...menu], h),
+      }
+    },
     Local: ({ table }) => tableView(localTableView(table), h),
     Online: ({ game }) => onlineView(game, model.now, h),
   })
