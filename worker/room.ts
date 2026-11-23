@@ -361,7 +361,9 @@ const startGame = (room: Room, deviceId: string, seed: number): RoomResult => {
     room.phase === 'RematchLobby'
       ? Array.filter(
           room.seats,
-          seat => seat.isReady || Option.contains(seat.maybeDeviceId, room.hostDeviceId),
+          seat =>
+            seat.isReady ||
+            Option.contains(seat.maybeDeviceId, room.hostDeviceId),
         )
       : room.seats
   if (seats.length < MIN_SEATS) {
@@ -479,6 +481,33 @@ const ping = (room: Room, deviceId: string, now: number): RoomResult =>
             }),
           ),
   })
+
+// REMOVE FROM THE MENU
+
+// NOTE: What deleting a game from your list does to the game itself. The host
+// closing a lobby deletes it for everyone. Anyone else seated in a lobby gives
+// up their seat, and a player in a game in progress leaves it (a bot takes the
+// seat). A finished game, or one you already left, is only taken off your list.
+export const Removal = Schema.Literals([
+  'CloseLobby',
+  'LeaveLobby',
+  'LeaveGame',
+  'Forget',
+])
+export type Removal = typeof Removal.Type
+
+export const removalFor = (room: Room, deviceId: string): Removal => {
+  if (isLobbyPhase(room)) {
+    if (isHost(room, deviceId)) {
+      return 'CloseLobby'
+    }
+    return Option.isSome(seatIndexOf(room, deviceId)) ? 'LeaveLobby' : 'Forget'
+  }
+  return room.phase === 'Playing' &&
+    Option.isSome(activeSeatIndexOf(room, deviceId))
+    ? 'LeaveGame'
+    : 'Forget'
+}
 
 // LEAVE AND REMATCH
 
@@ -778,6 +807,7 @@ export const REASON_IDLE_GAME = 'Removed after 3 days with no moves.'
 export const REASON_IDLE_LOBBY = 'Removed after 3 days without starting.'
 export const REASON_FINISHED = 'Removed one week after it ended.'
 export const REASON_EVERYONE_LEFT = 'Everyone left this game.'
+export const REASON_HOST_CLOSED = 'The host closed this lobby.'
 
 const isBotToMove = (room: Room): boolean =>
   room.phase === 'Playing' && Option.exists(room.maybeGame, isBotTurn)

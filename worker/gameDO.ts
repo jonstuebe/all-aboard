@@ -31,6 +31,9 @@ import {
   pushesForChange,
   warningNotice,
   REASON_EVERYONE_LEFT,
+  REASON_HOST_CLOSED,
+  type Removal,
+  removalFor,
   resultKey,
   runAlarm,
   seatedDeviceIds,
@@ -345,6 +348,29 @@ export class GameDO extends DurableObject<Env> {
     )
   }
 
+  // NOTE: Deleting a game from someone's list (DELETE /api/games/:code).
+  // Returns what it did so the caller knows whether to remember the deletion.
+  async removeFor(deviceId: string): Promise<Removal> {
+    return Option.match(this.maybeRoom, {
+      onNone: async () => 'Forget' as const,
+      onSome: async room => {
+        const removal = removalFor(room, deviceId)
+        switch (removal) {
+          case 'CloseLobby':
+            await this.deleteGame(REASON_HOST_CLOSED)
+            break
+          case 'LeaveLobby':
+          case 'LeaveGame':
+            await this.applyMessage(deviceId, ClientMessage.LeaveGame())
+            break
+          case 'Forget':
+            break
+        }
+        return removal
+      },
+    })
+  }
+
   // PUSH
 
   private async push(deviceId: string, notice: PushNotice): Promise<void> {
@@ -447,7 +473,9 @@ export class GameDO extends DurableObject<Env> {
     // quietly: deleted with no final-score push and no stats.
     if (!hasHumans(after) && after.phase !== 'Finished') {
       await this.deleteGame(
-        after.phase === 'Playing' ? REASON_EVERYONE_LEFT : 'Everyone left the lobby.',
+        after.phase === 'Playing'
+          ? REASON_EVERYONE_LEFT
+          : 'Everyone left the lobby.',
       )
     } else {
       await this.scheduleAlarm(after)

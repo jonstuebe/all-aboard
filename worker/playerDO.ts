@@ -59,6 +59,9 @@ export class PlayerDO extends DurableObject<Env> {
         'CREATE TABLE IF NOT EXISTS games (code TEXT PRIMARY KEY, json TEXT NOT NULL, updated_at INTEGER NOT NULL)',
       )
       sql.exec(
+        'CREATE TABLE IF NOT EXISTS forgotten (code TEXT PRIMARY KEY, at INTEGER NOT NULL)',
+      )
+      sql.exec(
         'CREATE TABLE IF NOT EXISTS stats (id INTEGER PRIMARY KEY CHECK (id = 1), games_played INTEGER NOT NULL, wins INTEGER NOT NULL, total_score INTEGER NOT NULL, longest_route INTEGER NOT NULL, tickets_completed INTEGER NOT NULL)',
       )
       sql.exec(
@@ -102,8 +105,20 @@ export class PlayerDO extends DurableObject<Env> {
   async upsertGame(entryJson: string): Promise<void> {
     Option.match(decodeMenuEntry(entryJson), {
       onNone: () => undefined,
-      onSome: entry => this.writeEntry(entry),
+      onSome: entry => {
+        if (!this.isForgotten(entry.code)) {
+          this.writeEntry(entry)
+        }
+      },
     })
+  }
+
+  private isForgotten(code: string): boolean {
+    return (
+      this.ctx.storage.sql
+        .exec('SELECT 1 FROM forgotten WHERE code = ?', code)
+        .toArray().length > 0
+    )
   }
 
   private writeEntry(entry: MenuEntry): void {
@@ -117,6 +132,19 @@ export class PlayerDO extends DurableObject<Env> {
 
   async removeGame(code: string): Promise<void> {
     this.ctx.storage.sql.exec('DELETE FROM games WHERE code = ?', code)
+  }
+
+  // NOTE: The player deleted a game they keep a seat in (a finished game, or
+  // one they left, where a bot plays on). Later updates from that game would
+  // put it back, so remember the code and ignore them.
+  async forgetGame(code: string, at: number): Promise<void> {
+    const sql = this.ctx.storage.sql
+    sql.exec('DELETE FROM games WHERE code = ?', code)
+    sql.exec(
+      'INSERT INTO forgotten (code, at) VALUES (?, ?) ON CONFLICT (code) DO NOTHING',
+      code,
+      at,
+    )
   }
 
   async markGone(code: string, reason: string, at: number): Promise<void> {

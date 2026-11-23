@@ -910,3 +910,7 @@ export const MAP_ART = joinMarkup([
   '<rect class="neatline" x="46" y="36" width="908" height="554"/>',
   '<rect class="neatline thin" x="51" y="41" width="898" height="544"/>',
 ])
+
+/** A small rubbish bin for delete buttons. Drawn in currentColor. */
+export const BIN_ICON =
+  '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>'

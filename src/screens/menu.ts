@@ -1,7 +1,9 @@
 import { Array, Option } from 'effect'
 import type { Html, HtmlBuilder } from 'foldkit/html'
 
+import { BIN_ICON } from '../art'
 import { type Stats, averageScore, winRate } from '../domain/results'
+import { deletePrompt } from '../menuDelete'
 import { MenuState } from '../menuSync'
 import { Message } from '../message'
 import { pingMinutesLeft } from '../pings'
@@ -24,7 +26,8 @@ const entryDetail = (entry: MenuEntry): string => {
         onSome: name => `Waiting on ${name}`,
       })
     case 'Lobby':
-      return `${entry.seatNames.length} seated · not started`
+      // NOTE: The names under the pill already show who is seated.
+      return 'Not started'
     case 'Finished':
       return Option.match(entry.maybeResult, {
         onNone: () => 'Finished',
@@ -42,6 +45,9 @@ const entryDetail = (entry: MenuEntry): string => {
 }
 
 export type PingClock = Readonly<{ now: number }>
+
+export type MenuContext = PingClock &
+  Readonly<{ maybeConfirmingDelete: Option.Option<string> }>
 
 const pingButton = (
   entry: MenuEntry,
@@ -70,25 +76,123 @@ const pingButton = (
     },
   })
 
+const deleteButton = (entry: MenuEntry, h: HtmlBuilder<Message>): Html =>
+  h.button([
+    h.Class('menu-game-delete'),
+    h.Type('button'),
+    h.AriaLabel(`Delete ${entry.code}`),
+    h.OnClick(Message.ClickedDeleteGame({ code: entry.code })),
+    h.InnerHTML(BIN_ICON),
+  ])
+
+// NOTE: The pill's colour names the state at a glance: red for your move,
+// green while you wait, gold for a win, plain otherwise.
+const pillTone = (entry: MenuEntry): string => {
+  switch (entry.status) {
+    case 'YourTurn':
+      return 'is-turn'
+    case 'Waiting':
+      return 'is-waiting'
+    case 'Finished':
+      return Option.exists(entry.maybeResult, result => result.isWinner)
+        ? 'is-won'
+        : 'is-plain'
+    case 'Lobby':
+      return 'is-plain'
+    case 'Left':
+    case 'Gone':
+      return 'is-muted'
+  }
+}
+
+// NOTE: Deleting asks once, in place of the row's own content, since what it
+// does depends on the game (see deletePrompt).
+const confirmDelete = (entry: MenuEntry, h: HtmlBuilder<Message>): Html =>
+  h.div(
+    [
+      h.Class('menu-game-confirm'),
+      h.Role('group'),
+      h.AriaLabel(`Delete ${entry.code}`),
+    ],
+    [
+      h.p([h.Class('menu-game-confirm-text')], [deletePrompt(entry.status)]),
+      h.div(
+        [h.Class('menu-game-confirm-actions')],
+        [
+          h.button(
+            [
+              h.Class('btn btn-text btn-compact'),
+              h.Type('button'),
+              h.OnClick(Message.ClickedCancelDeleteGame()),
+            ],
+            ['Cancel'],
+          ),
+          h.button(
+            [
+              h.Class('btn btn-red btn-compact'),
+              h.Type('button'),
+              h.OnClick(Message.ClickedConfirmDeleteGame({ code: entry.code })),
+            ],
+            [
+              entry.status === 'YourTurn' || entry.status === 'Waiting'
+                ? 'Leave'
+                : 'Delete',
+            ],
+          ),
+        ],
+      ),
+    ],
+  )
+
 const entryRow = (
   entry: MenuEntry,
-  clock: PingClock,
+  context: MenuContext,
   h: HtmlBuilder<Message>,
 ): Html =>
   h.keyed('li')(
     entry.code,
     [h.Class(`menu-game is-${entry.status.toLowerCase()}`)],
-    [
-      h.a(
-        [h.Class('menu-game-link'), h.Href(gamePath(entry.code))],
-        [
-          h.span([h.Class('menu-game-code')], [entry.code]),
-          h.span([h.Class('menu-game-names')], [entry.seatNames.join(', ')]),
-          h.span([h.Class('menu-game-detail')], [entryDetail(entry)]),
+    Option.contains(context.maybeConfirmingDelete, entry.code)
+      ? [confirmDelete(entry, h)]
+      : [
+          h.a(
+            [h.Class('menu-game-link'), h.Href(gamePath(entry.code))],
+            [
+              h.span(
+                [h.Class('menu-game-stub')],
+                [
+                  h.span(
+                    [h.Class('menu-game-kind')],
+                    [entry.status === 'Lobby' ? 'Lobby' : 'Game'],
+                  ),
+                  h.span([h.Class('menu-game-code')], [entry.code]),
+                ],
+              ),
+              h.span(
+                [h.Class('menu-game-body')],
+                [
+                  h.span(
+                    [h.Class(`menu-game-pill ${pillTone(entry)}`)],
+                    [entryDetail(entry)],
+                  ),
+                  h.span(
+                    [h.Class('menu-game-names')],
+                    [entry.seatNames.join(', ')],
+                  ),
+                ],
+              ),
+            ],
+          ),
+          h.div(
+            [h.Class('menu-game-actions')],
+            [
+              entry.status === 'Waiting'
+                ? pingButton(entry, context, h)
+                : h.empty,
+              deleteButton(entry, h),
+            ],
+          ),
         ],
-      ),
-      entry.status === 'Waiting' ? pingButton(entry, clock, h) : h.empty,
-    ],
   )
 
 type Section = Readonly<{
@@ -105,7 +209,7 @@ const SECTIONS: ReadonlyArray<Section> = [
 
 const gameSections = (
   menu: Menu,
-  clock: PingClock,
+  context: MenuContext,
   h: HtmlBuilder<Message>,
 ): ReadonlyArray<Html> =>
   Array.getSomes(
@@ -121,7 +225,7 @@ const gameSections = (
                 h.h2([h.Class('menu-subheading is-first')], [section.title]),
                 h.ul(
                   [h.Class('menu-games')],
-                  Array.map(entries, entry => entryRow(entry, clock, h)),
+                  Array.map(entries, entry => entryRow(entry, context, h)),
                 ),
               ],
             ),
@@ -179,23 +283,23 @@ const statsCard = (stats: Stats, h: HtmlBuilder<Message>): Html =>
 
 const loadedView = (
   menu: Menu,
-  clock: PingClock,
+  context: MenuContext,
   h: HtmlBuilder<Message>,
 ): ReadonlyArray<Html> => [
-  ...gameSections(menu, clock, h),
+  ...gameSections(menu, context, h),
   statsCard(menu.stats, h),
 ]
 
 export const menuView = (
   state: MenuState,
-  clock: PingClock,
+  context: MenuContext,
   h: HtmlBuilder<Message>,
 ): ReadonlyArray<Html> =>
   MenuState.match<ReadonlyArray<Html>>(state, {
     Loading: () => [
       h.p([h.Class('menu-status'), h.Role('status')], ['Loading your games…']),
     ],
-    Loaded: ({ menu }) => loadedView(menu, clock, h),
+    Loaded: ({ menu }) => loadedView(menu, context, h),
     Offline: ({ maybeMenu }) => [
       h.p(
         [h.Class('menu-status'), h.Role('status')],
@@ -205,7 +309,7 @@ export const menuView = (
       ),
       ...Option.match(maybeMenu, {
         onNone: () => [],
-        onSome: menu => loadedView(menu, clock, h),
+        onSome: menu => loadedView(menu, context, h),
       }),
     ],
   })

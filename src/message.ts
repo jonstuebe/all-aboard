@@ -34,6 +34,10 @@ export const Message = defineMessageUnion({
   CompletedQueueLocalResult: {},
   ClickedMenuPing: { code: Schema.String },
   CompletedMenuPing: { maybeReason: Schema.Option(Schema.String) },
+  ClickedDeleteGame: { code: Schema.String },
+  ClickedCancelDeleteGame: {},
+  ClickedConfirmDeleteGame: { code: Schema.String },
+  CompletedDeleteGame: { maybeReason: Schema.Option(Schema.String) },
   TickedClock: { now: Schema.Number },
 
   // NOTIFICATIONS

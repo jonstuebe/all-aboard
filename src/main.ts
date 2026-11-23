@@ -45,6 +45,7 @@ import {
   localTableView,
   playLocalBot,
 } from './localTable'
+import { DeleteGameFromMenu, withoutGame } from './menuDelete'
 import {
   FetchMenu,
   MenuState,
@@ -118,6 +119,7 @@ export const Model = Schema.Struct({
   seatCount: Schema.Number,
   device: Device,
   menu: MenuState,
+  maybeConfirmingDelete: Schema.Option(Schema.String),
   now: Schema.Number,
   notifications: NotificationStatus,
 })
@@ -636,6 +638,28 @@ export const update = (model: Model, message: Message) =>
 
     CompletedMenuPing: () => ({ model, commands: [fetchMenu(model)] }),
 
+    ClickedDeleteGame: ({ code }) => ({
+      model: modifyFields(model, {
+        maybeConfirmingDelete: () => Option.some(code),
+      }),
+    }),
+
+    ClickedCancelDeleteGame: () => ({
+      model: modifyFields(model, {
+        maybeConfirmingDelete: () => Option.none(),
+      }),
+    }),
+
+    ClickedConfirmDeleteGame: ({ code }) => ({
+      model: modifyFields(model, {
+        maybeConfirmingDelete: () => Option.none(),
+        menu: menu => withoutGame(menu, code),
+      }),
+      commands: [DeleteGameFromMenu({ code, device: model.device })],
+    }),
+
+    CompletedDeleteGame: () => ({ model, commands: [fetchMenu(model)] }),
+
     TickedClock: ({ now }) => ({
       model: modifyFields(model, { now: () => now }),
     }),
@@ -889,6 +913,7 @@ export const init: Runtime.RoutingApplicationInit<Model, Message, Flags> = (
     seatCount: DEFAULT_SEAT_COUNT,
     device: initialFlags.device,
     menu: MenuState.Loading(),
+    maybeConfirmingDelete: Option.none(),
     now: initialFlags.now,
     notifications: NotificationStatus.Checking(),
   }
@@ -1038,7 +1063,14 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document =>
         { playerName: model.playerName, seatCount: model.seatCount },
         [
           notificationsView(model.notifications, h),
-          ...menuView(model.menu, { now: model.now }, h),
+          ...menuView(
+            model.menu,
+            {
+              now: model.now,
+              maybeConfirmingDelete: model.maybeConfirmingDelete,
+            },
+            h,
+          ),
         ],
         h,
       ),

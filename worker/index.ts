@@ -225,6 +225,22 @@ const pingGame = async (env: Env, code: string, deviceId: string) => {
   return maybeReason === null ? json({ ok: true }) : fail(409, maybeReason)
 }
 
+// NOTE: Deletes a game from this device's list, and does whatever that means
+// for the game itself (see removalFor). A lobby you closed or left no longer
+// seats you, so it can simply be dropped; any other game would send updates
+// for your old seat, so it is forgotten instead.
+const deleteGame = async (env: Env, code: string, deviceId: string) => {
+  const game = env.GAMES.getByName(code)
+  const removal = (await game.exists())
+    ? await game.removeFor(deviceId)
+    : 'Forget'
+  const player = env.PLAYERS.getByName(deviceId)
+  await (removal === 'CloseLobby' || removal === 'LeaveLobby'
+    ? player.removeGame(code)
+    : player.forgetGame(code, Date.now()))
+  return json({ ok: true })
+}
+
 const GAME_PATH = /^\/api\/games\/([^/]+)(\/ws|\/ping)?$/
 
 export const route = async (request: Request, env: Env): Promise<Response> => {
@@ -276,6 +292,9 @@ export const route = async (request: Request, env: Env): Promise<Response> => {
       return request.method === 'POST'
         ? pingGame(env, code, deviceId)
         : fail(405, 'Use POST.')
+    }
+    if (gameMatch[2] === undefined && request.method === 'DELETE') {
+      return deleteGame(env, code, deviceId)
     }
     return gameMatch[2] === '/ws'
       ? connectToGame(env, request, code, deviceId)

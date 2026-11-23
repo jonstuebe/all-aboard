@@ -357,64 +357,211 @@
   list-style: none;
 }
 
+/* Each game is a ticket: the code on a torn-off stub at the left, a status
+   pill and the names on the body, and a bin to delete it. */
 .menu-game {
+  position: relative;
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 4px 6px 4px 0;
-  border-radius: var(--radius-small);
-  background: rgb(255 255 255 / 0.35);
-  border: 1px solid rgb(185 156 99 / 0.5);
-}
-
-.menu-game.is-yourturn {
-  border-color: var(--enamel-red);
-  box-shadow: inset 4px 0 0 var(--enamel-red);
+  align-items: stretch;
+  min-height: 64px;
+  border-radius: 6px;
+  border: 1px solid #c9b07f;
+  background: #fbf4e2;
+  box-shadow: 0 1px 0 rgb(0 0 0 / 0.08);
+  overflow: hidden;
 }
 
 .menu-game-link {
   flex: 1;
-  display: grid;
-  grid-template-columns: auto 1fr;
-  grid-template-areas:
-    'code detail'
-    'names names';
-  column-gap: 10px;
-  min-height: 44px;
-  padding: 6px 10px;
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
   color: inherit;
   text-decoration: none;
 }
 
-.menu-game-link:hover .menu-game-code {
-  text-decoration: underline;
+.menu-game-stub {
+  position: relative;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 2px;
+  padding: 8px 12px 8px 10px;
+  border-right: 2px dashed #c9b07f;
+  background: #efe0bd;
+}
+
+/* The notches where the stub tears off, punched in the card's colour. */
+.menu-game-stub::before,
+.menu-game-stub::after {
+  content: '';
+  position: absolute;
+  right: -8px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid #c9b07f;
+  background: var(--paper);
+}
+
+.menu-game-stub::before {
+  top: -8px;
+}
+
+.menu-game-stub::after {
+  bottom: -8px;
+}
+
+.menu-game-kind {
+  font-family: var(--font-engraved);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
 }
 
 .menu-game-code {
-  grid-area: code;
-  font-family: var(--font-engraved);
-  font-size: 1.0625rem;
-  letter-spacing: 0.04em;
-}
-
-.menu-game-detail {
-  grid-area: detail;
-  justify-self: end;
-  font-weight: 600;
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
   color: var(--ink);
 }
 
-.menu-game.is-gone .menu-game-detail,
-.menu-game.is-left .menu-game-detail {
+.menu-game-link:hover .menu-game-code {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.menu-game-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 4px 8px 16px;
+}
+
+.menu-game-pill {
+  max-width: 100%;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: #e8dcc0;
+  color: var(--ink);
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu-game-pill.is-turn {
+  background: var(--enamel-red);
+  color: var(--paper-light);
+}
+
+.menu-game-pill.is-waiting {
+  background: #d9e3d3;
+  color: #24462f;
+}
+
+.menu-game-pill.is-won {
+  background: #f1dd9a;
+  color: #5a4210;
+}
+
+.menu-game-pill.is-muted {
+  background: transparent;
+  padding-inline: 0;
   font-weight: 400;
   font-style: italic;
   color: var(--ink-muted);
 }
 
 .menu-game-names {
-  grid-area: names;
+  max-width: 100%;
+  overflow: hidden;
   font-size: 0.875rem;
   color: var(--ink-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Your move: the stub goes enamel red. */
+.menu-game.is-yourturn {
+  border-color: var(--enamel-red);
+}
+
+.menu-game.is-yourturn .menu-game-stub {
+  border-right-color: #e9b9a8;
+  background: var(--enamel-red);
+}
+
+.menu-game.is-yourturn .menu-game-stub::before,
+.menu-game.is-yourturn .menu-game-stub::after {
+  border-color: var(--enamel-red);
+}
+
+.menu-game.is-yourturn .menu-game-kind {
+  color: #f3d0c4;
+}
+
+.menu-game.is-yourturn .menu-game-code {
+  color: var(--paper-light);
+}
+
+.menu-game.is-left,
+.menu-game.is-gone {
+  opacity: 0.8;
+}
+
+.menu-game-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 4px;
+}
+
+.menu-game-delete {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+
+.menu-game-delete:hover {
+  color: var(--enamel-red);
+}
+
+.menu-game-confirm {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 6px 4px 6px 12px;
+}
+
+.menu-game-confirm-text {
+  flex: 1 1 200px;
+  margin: 0;
+  color: var(--ink);
+}
+
+.menu-game-confirm-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
 }
 
 .stat-grid {
