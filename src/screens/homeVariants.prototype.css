@@ -95,7 +95,7 @@
   letter-spacing: 0.01em;
 }
 
-/* ───────────── SHARED AFFORDANCES (A, B, D, F) ─────────────
+/* ───────────── SHARED AFFORDANCES (all variants) ─────────────
    Each variant sets the --hv-* tokens; the shapes stay the same:
    raised buttons, inset fields with a label above, a segmented control. */
 
@@ -235,141 +235,6 @@
   font-weight: 600;
 }
 
-/* ───────────── A · DEPARTURE BOARD (softened) ───────────── */
-
-.hv-a {
-  --hv-radius: 10px;
-  --hv-label: #e3c98f;
-  --hv-field-bg: #f7eed8;
-  --hv-field-ink: #2b1a0e;
-  --hv-field-border: #b48a3c;
-  --hv-placeholder: #9a8a6e;
-  --hv-focus: #f3cf6e;
-  --hv-seg-bg: #24160c;
-  --hv-seg-ink: #e8d9b8;
-  --hv-seg-on: linear-gradient(#f0d27c, #c99a3d);
-  --hv-seg-on-ink: #2b1a0e;
-  --hv-btn-ink: #2b1a0e;
-  --hv-btn-friends: linear-gradient(#f2d688, #cf9f42);
-  --hv-btn-friends-edge: #7a5620;
-  --hv-btn-bots: linear-gradient(#f2d688, #cf9f42);
-  --hv-btn-bots-edge: #7a5620;
-  --hv-btn-join: linear-gradient(#f2d688, #cf9f42);
-  --hv-btn-join-edge: #7a5620;
-}
-
-.hv-a-board {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  padding: 22px 18px 24px;
-  border: 5px solid #b48a3c;
-  border-radius: 16px;
-  background:
-    radial-gradient(ellipse at 50% -10%, rgb(255 220 150 / 0.12), transparent 60%),
-    linear-gradient(#3b2415, #2a180d);
-  box-shadow:
-    inset 0 0 0 2px #5e4314,
-    inset 0 2px 12px rgb(0 0 0 / 0.5),
-    0 10px 22px rgb(0 0 0 / 0.55);
-  color: #f3e6c8;
-}
-
-.hv-a-title {
-  display: flex;
-  justify-content: center;
-}
-
-.hv-flaps {
-  display: inline-flex;
-  gap: 3px;
-}
-
-.hv-flap {
-  display: inline-grid;
-  place-items: center;
-  min-width: 1.25em;
-  padding: 5px 2px;
-  border-radius: 4px;
-  background: linear-gradient(#2a1a10 0 49%, #120a05 49% 51%, #22150c 51%);
-  color: #f3dc92;
-  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
-  font-size: 1.2rem;
-  font-weight: 700;
-  box-shadow: 0 1px 0 rgb(255 230 170 / 0.15);
-}
-
-.hv-a-deps {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.hv-a-dep {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 18px 0;
-  border-top: 1px solid rgb(243 230 200 / 0.16);
-}
-
-.hv-a-dep:last-child {
-  border-bottom: 1px solid rgb(243 230 200 / 0.16);
-}
-
-.hv-a-dep-head {
-  display: grid;
-  grid-template-columns: 48px 1fr;
-  gap: 12px;
-  align-items: baseline;
-}
-
-.hv-a-time {
-  color: #9fd59a;
-  font-weight: 700;
-  font-size: 0.95rem;
-}
-
-.hv-a-dest {
-  color: #fbf1d8;
-  font-family: var(--font-display);
-  font-size: 1.45rem;
-  font-weight: 400;
-}
-
-.hv-a-detail {
-  margin: 4px 0 0;
-  color: #d6c3a0;
-  font-size: 0.95rem;
-  line-height: 1.4;
-}
-
-.hv-a-connect {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.hv-a .hv-field-input.is-flap {
-  border-color: #b48a3c;
-  background: #1a0f08;
-  color: #f3dc92;
-  font-weight: 700;
-  font-size: 1.15rem;
-}
-
-.hv-a .hv-field-input.is-flap::placeholder {
-  color: #6f5a36;
-}
-
-.hv-a .hv-error {
-  color: #ffc2b5;
-  background: rgb(168 56 42 / 0.25);
-}
-
 /* ───────────── B · PRINTED TICKET ───────────── */
 
 .hv-b {
@@ -475,456 +340,178 @@
   margin: 0 18px 18px;
 }
 
-/* ───────────── D · TIMETABLE POSTER ───────────── */
+/* ───────────── G · TICKET BOOK TABS ─────────────
+   B's ticket; three raised stub tabs pick the one section shown. */
 
-.hv-d {
-  --hv-radius: 4px;
-  --hv-label: #161210;
-  --hv-field-bg: #fffdf6;
-  --hv-field-ink: #161210;
-  --hv-field-border: #161210;
-  --hv-placeholder: #8f8370;
-  --hv-focus: #d98a2b;
-  --hv-seg-bg: #fffdf6;
-  --hv-seg-ink: #161210;
-  --hv-seg-on: #161210;
-  --hv-seg-on-ink: #f4ecd6;
-  --hv-btn-ink: #fdf6e3;
-  --hv-btn-friends: #a8382a;
-  --hv-btn-friends-edge: #161210;
-  --hv-btn-bots: #a8382a;
-  --hv-btn-bots-edge: #161210;
-  --hv-btn-join: #a8382a;
-  --hv-btn-join-edge: #161210;
-}
-
-.hv-d-poster {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  padding: 22px 18px 24px;
-  background: #f4ecd6;
-  color: #161210;
-  box-shadow:
-    0 0 0 1px #c8b88e,
-    0 10px 22px rgb(0 0 0 / 0.6);
-}
-
-.hv-d-kicker {
-  margin: 0;
-  padding-bottom: 8px;
-  border-bottom: 3px solid #161210;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-}
-
-.hv-d-headline {
-  font-family: var(--font-display);
-  font-size: 2.6rem;
-  font-weight: 400;
-  line-height: 0.95;
-  color: #a8382a;
-}
-
-.hv-d-headline span {
-  display: block;
-  margin-top: 8px;
-  font-family: var(--font-body);
-  font-size: 1rem;
-  font-weight: 700;
-  color: #161210;
-}
-
-.hv-d-service {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding-top: 16px;
-  border-top: 3px solid #161210;
-}
-
-.hv-d-service-head {
+.hv-g-tabs {
   display: grid;
-  grid-template-columns: 36px 1fr;
-  gap: 10px;
-  align-items: baseline;
-}
-
-.hv-d-number {
-  font-family: var(--font-display);
-  font-size: 1.8rem;
-  line-height: 1;
-  color: #a8382a;
-}
-
-.hv-d-name {
-  font-family: var(--font-body);
-  font-size: 1.2rem;
-  font-weight: 800;
-}
-
-.hv-d-detail {
-  margin: 3px 0 0;
-  color: #5a4c3a;
-  font-style: italic;
-}
-
-/* ───────────── F · TICKET DEPARTURES (hybrid) ───────────── */
-
-.hv-f {
-  --hv-radius: 10px;
-  --hv-label: #4a3622;
-  --hv-field-bg: #fffaf0;
-  --hv-field-ink: #1f2f52;
-  --hv-field-border: #8a6f4c;
-  --hv-placeholder: #a8957a;
-  --hv-focus: #c9862f;
-  --hv-seg-bg: #f7ecd2;
-  --hv-seg-ink: #3a2415;
-  --hv-seg-on: #1f4a39;
-  --hv-seg-on-ink: #f9f0d8;
-  --hv-btn-ink: #fdf6e3;
-  --hv-btn-friends: linear-gradient(#bd4636, #9b3124);
-  --hv-btn-friends-edge: #5e1a11;
-  --hv-btn-bots: linear-gradient(#2f6b52, #1f4a39);
-  --hv-btn-bots-edge: #0f2a20;
-  --hv-btn-join: linear-gradient(#3d6290, #2b4a70);
-  --hv-btn-join-edge: #172b44;
-}
-
-.hv-f .hv-btn {
-  min-height: 54px;
-  font-size: 1.12rem;
-}
-
-.hv-f .hv-btn:not(.is-join)::after {
-  content: '  →';
-}
-
-.hv-f-ticket {
-  overflow: hidden;
-  border-radius: 12px;
-  background-color: #f3e7c6;
-  background-image: repeating-linear-gradient(
-    0deg,
-    rgb(120 90 40 / 0.045) 0 1px,
-    transparent 1px 3px
-  );
-  color: #2e1d10;
-  box-shadow: 0 8px 18px rgb(0 0 0 / 0.55);
-}
-
-.hv-f-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 14px 18px;
-  background: #1f4a39;
-  color: #f9f0d8;
-}
-
-.hv-f-title {
-  font-family: var(--font-display);
-  font-size: 1.6rem;
-  font-weight: 400;
-}
-
-.hv-f-sub {
-  font-family: var(--font-engraved);
-  font-size: 12px;
-  letter-spacing: 0.05em;
-  opacity: 0.85;
-}
-
-.hv-f-passenger {
-  padding: 18px 18px 20px;
-}
-
-.hv-f-rows {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.hv-f-row {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 20px 18px 22px;
-  border-top: 2px dashed #c4a86e;
-}
-
-.hv-f-row-head {
-  display: grid;
-  grid-template-columns: 58px 1fr;
-  gap: 12px;
-  align-items: start;
-}
-
-.hv-f-plat {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  color: #6b5a45;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.hv-f-plat strong {
-  color: #a8382a;
-  font-family: var(--font-display);
-  font-size: 2rem;
-  font-weight: 400;
-  line-height: 1.1;
-  letter-spacing: 0;
-}
-
-.hv-f-dest {
-  font-family: var(--font-display);
-  font-size: 1.45rem;
-  font-weight: 400;
-}
-
-.hv-f-detail {
-  margin: 3px 0 0;
-  color: #5d4a35;
-  font-size: 0.97rem;
-  line-height: 1.4;
-}
-
-.hv-f .hv-error {
-  margin: 0 18px 18px;
-}
-
-/* ───────────── E · LUGGAGE TAGS ───────────── */
-
-.hv-e-hero {
-  position: relative;
-  overflow: hidden;
-  min-height: 210px;
-  padding: 22px 18px 18px;
-  border-radius: 10px;
-  background: linear-gradient(#f2b45f, #e98a52 48%, #b9503d 80%);
-  box-shadow: 0 8px 20px rgb(0 0 0 / 0.55);
-}
-
-.hv-e-sun {
-  position: absolute;
-  right: 26px;
-  top: 22px;
-  width: 74px;
-  height: 74px;
-  border-radius: 50%;
-  background: #fde7a0;
-}
-
-.hv-e-hills {
-  position: absolute;
-  left: -10%;
-  right: -10%;
-  bottom: -40px;
-  height: 110px;
-  border-radius: 50% 50% 0 0;
-  background: #1f4a39;
-  box-shadow: -120px 24px 0 -10px #2c5f49;
-}
-
-.hv-e-hills::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 26px;
-  height: 6px;
-  background: repeating-linear-gradient(90deg, #2b2118 0 8px, transparent 8px 14px);
-}
-
-.hv-e-greeting {
-  position: relative;
-  max-width: 70%;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  font-family: var(--font-display);
-  font-size: 2rem;
-  font-weight: 400;
-  line-height: 1.05;
-  color: #2b1408;
-}
-
-.hv-e-nametag {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: min(100%, 250px);
-  margin-top: 16px;
-  padding: 8px 12px 8px 26px;
-  border-radius: 4px 16px 16px 4px;
-  background: #f9f0d8;
-  box-shadow: 0 3px 8px rgb(0 0 0 / 0.35);
-  transform: rotate(-3deg);
-}
-
-.hv-e-nametag .hv-e-hole {
-  left: 9px;
-  top: calc(50% - 5px);
-}
-
-.hv-e-caption {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: #6b5a45;
-}
-
-.hv-e-name {
-  flex: 1;
-  border: 0;
-  background: transparent;
-  color: #2b2118;
-  font-family: var(--font-script);
-  font-size: 1.2rem;
-}
-
-.hv-e-name:focus {
-  outline: none;
-}
-
-.hv-e-tags {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 14px;
-}
-
-.hv-e-tag {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  margin: 0;
-  padding: 16px 16px 16px 44px;
-  border: 0;
-  border-radius: 6px 26px 26px 6px;
-  color: #f9f0d8;
-  text-align: left;
-  box-shadow: 0 5px 12px rgb(0 0 0 / 0.45);
-}
-
-.hv-e-tag:nth-child(1) { transform: rotate(-1.2deg); }
-.hv-e-tag:nth-child(2) { transform: rotate(0.8deg); }
-.hv-e-tag:nth-child(3) { transform: rotate(-0.6deg); }
-
-.hv-e-tag.is-red { background: #a8382a; }
-.hv-e-tag.is-green { background: #1f4a39; }
-.hv-e-tag.is-blue { background: #2f4f73; }
-
-.hv-e-hole {
-  position: absolute;
-  left: 16px;
-  top: calc(50% - 7px);
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: #3b2414;
-  box-shadow: 0 0 0 3px #cda54c;
-}
-
-.hv-e-hole::before {
-  content: '';
-  position: absolute;
-  right: 100%;
-  top: 6px;
-  width: 22px;
-  height: 2px;
-  background: #e9dcb8;
-}
-
-.hv-e-dest {
-  font-family: var(--font-display);
-  font-size: 1.45rem;
-  font-weight: 400;
-}
-
-.hv-e-sub {
-  font-size: 13px;
-  opacity: 0.85;
-}
-
-.hv-e-tag-main {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  text-align: left;
-}
-
-.hv-e-chips {
-  display: flex;
+  grid-template-columns: repeat(3, 1fr);
   gap: 6px;
-  margin-top: 6px;
+  padding: 0 14px;
 }
 
-.hv-e-chip {
-  width: 34px;
-  height: 34px;
-  border: 1.5px solid rgb(249 240 216 / 0.6);
-  border-radius: 50%;
-  background: transparent;
-  color: #f9f0d8;
+.hv-g-tab {
+  position: relative;
+  min-height: 48px;
+  border: 1.5px solid #8a6f4c;
+  border-bottom: 0;
+  border-radius: 10px 10px 0 0;
+  background: linear-gradient(#e6d3a4, #d9c18b);
+  color: #3a2415;
+  font-family: var(--font-body);
+  font-size: 1.02rem;
   font-weight: 700;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.45),
+    inset 0 -8px 8px -8px rgb(0 0 0 / 0.3);
 }
 
-.hv-e-chip.is-on {
-  background: #f9f0d8;
-  color: #1f4a39;
+.hv-g-tab:active:not(.is-open) {
+  transform: translateY(2px);
 }
 
-.hv-e-join-row {
-  display: flex;
-  gap: 8px;
-  width: 100%;
+.hv-g-tab.is-open {
+  z-index: 1;
+  /* Same paper as the panel, overlapping its top border so they join. */
+  margin-bottom: -1.5px;
+  background: #efe0b9;
+  color: #a8382a;
+  box-shadow: 0 -3px 6px rgb(0 0 0 / 0.12);
+}
+
+.hv-g-tab:focus-visible {
+  outline: 3px solid var(--hv-focus);
+  outline-offset: 2px;
+}
+
+.hv-g-panel {
+  min-height: 300px;
+  border-top: 1.5px solid #8a6f4c;
+}
+
+/* ───────────── H · HERO TICKET ─────────────
+   One big ticket for friends, a smaller bots slip, a thin join strip. */
+
+.hv-h .hv-b-title {
+  font-size: 2rem;
+  text-align: left;
+}
+
+.hv-h-lead {
+  margin: -8px 0 2px;
+}
+
+.hv-btn.is-hero {
+  min-height: 60px;
   margin-top: 4px;
+  font-size: 1.22rem;
 }
 
-.hv-e-code {
+.hv-h-slip {
+  align-self: center;
+  width: calc(100% - 28px);
+}
+
+.hv-h-slip-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 16px 18px;
+}
+
+.hv-h-slip .hv-b-route {
+  font-size: 1.2rem;
+}
+
+.hv-h-slip-head .hv-b-fine {
+  margin: 2px 0 0;
+}
+
+.hv-h-strip {
+  align-self: center;
+  width: calc(100% - 56px);
+  padding: 10px 14px 14px;
+  box-shadow: 0 4px 10px rgb(0 0 0 / 0.45);
+}
+
+.hv-h-strip .hv-field-input,
+.hv-h-strip .hv-btn {
+  min-height: 46px;
+}
+
+/* ───────────── I · TICKET CAROUSEL ─────────────
+   A passenger slip, then three tickets you swipe through; the next one
+   peeks in. Side by side on wide screens. */
+
+.hv-i-slip .hv-b-body {
+  padding-top: 18px;
+}
+
+.hv-i-track {
+  display: flex;
+  gap: 14px;
+  /* Bleed to the screen edges so the next ticket peeks in. */
+  margin: 0 -16px;
+  padding: 4px 16px 14px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-padding: 0 16px;
+  list-style: none;
+  scrollbar-width: none;
+}
+
+.hv-i-track::-webkit-scrollbar {
+  display: none;
+}
+
+.hv-i-ticket {
+  display: flex;
+  flex: 0 0 84%;
+  flex-direction: column;
+  scroll-snap-align: start;
+}
+
+.hv-i-body {
+  display: flex;
   flex: 1;
-  padding: 8px 10px;
-  border: 0;
-  border-radius: 4px;
-  background: #f9f0d8;
-  color: #2b2118;
-  font-family: ui-monospace, Menlo, monospace;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 16px 20px;
 }
 
-.hv-e-go {
-  padding: 0 16px;
-  border: 1.5px solid #f9f0d8;
-  border-radius: 999px;
-  background: transparent;
-  color: #f9f0d8;
-  font-weight: 700;
+/* Keep each ticket's button on its bottom edge so the three line up. */
+.hv-i-body > :last-child {
+  margin-top: auto;
 }
 
-.hv-e-error {
-  margin: 0;
-  color: #ffb4a6;
-  font-weight: 600;
+.hv-i-hint {
+  margin: -6px 0 0;
+  color: #d6c3a0;
+  font-size: 0.92rem;
+  font-style: italic;
+  text-align: center;
 }
 
-.hv-e .hv-rest .menu-card {
-  border-radius: 6px 22px 22px 6px;
+@media (min-width: 900px) {
+  .hv.hv-i {
+    width: min(100%, 980px);
+  }
+
+  .hv-i-slip,
+  .hv-i .hv-rest {
+    align-self: center;
+    width: min(100%, 560px);
+  }
+
+  .hv-i-track {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    margin: 0;
+    padding: 4px 0 0;
+    overflow: visible;
+  }
+
+  .hv-i-hint {
+    display: none;
+  }
 }

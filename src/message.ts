@@ -33,6 +33,7 @@ export const Message = defineMessageUnion({
   // PROTOTYPE (home variants)
   SteppedHomeVariant: { step: Schema.Number },
   CompletedReplaceVariantUrl: {},
+  ClickedHomeTab: { tab: Schema.String },
 
   // NOTIFICATIONS
   CheckedNotifications: { status: NotificationStatus },

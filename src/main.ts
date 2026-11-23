@@ -122,6 +122,7 @@ export const Model = Schema.Struct({
   now: Schema.Number,
   notifications: NotificationStatus,
   homeVariant: Schema.String,
+  homeTab: Schema.String,
 })
 export type Model = typeof Model.Type
 
@@ -623,6 +624,10 @@ export const update = (model: Model, message: Message) =>
 
     CompletedReplaceVariantUrl: () => ({ model }),
 
+    ClickedHomeTab: ({ tab }) => ({
+      model: modifyFields(model, { homeTab: () => tab }),
+    }),
+
     TickedClock: ({ now }) => ({
       model: modifyFields(model, { now: () => now }),
     }),
@@ -865,6 +870,7 @@ export const init: Runtime.RoutingApplicationInit<Model, Message, Flags> = (
     now: initialFlags.now,
     notifications: NotificationStatus.Checking(),
     homeVariant: variantFromSearch(HOME_VARIANTS, url.search),
+    homeTab: 'friends',
   }
   const screen = screenForRoute(base, route)
   return {
@@ -1040,7 +1046,7 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document =>
               [
                 homeVariantView(
                   model.homeVariant,
-                  { home, inputs, notifications, menu },
+                  { home, inputs, notifications, menu, tab: model.homeTab },
                   h,
                 ),
                 prototypeSwitcher(HOME_VARIANTS, model.homeVariant, h),
