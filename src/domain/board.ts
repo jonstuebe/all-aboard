@@ -106,10 +106,12 @@ export const ROUTES: ReadonlyArray<Route> = [
   { id: 'r17', from: 'denver', to: 'chicago', length: 3, color: 'Blue' },
 ]
 
+export const maybeRouteById = (routeId: string): Option.Option<Route> =>
+  Array.findFirst(ROUTES, route => route.id === routeId)
+
 export const routeById = (routeId: string): Route =>
   pipe(
-    ROUTES,
-    Array.findFirst(route => route.id === routeId),
+    maybeRouteById(routeId),
     Option.getOrThrowWith(() => new Error(`Unknown route ${routeId}`)),
   )
 

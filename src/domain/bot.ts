@@ -1,4 +1,4 @@
-import { Array, Option, Order, pipe } from 'effect'
+import { Array, Option, Order, Result, pipe } from 'effect'
 
 import type { Model, TurnStep } from '../model'
 import {
@@ -12,6 +12,7 @@ import {
 } from './board'
 import {
   PlayerAction,
+  applyAction,
   canDrawFromDeck,
   canTakeMarketCard,
   countCards,
@@ -249,3 +250,19 @@ export const decideBotAction = (model: Model): PlayerAction =>
         ? chooseDraw(model, step, wantedColors(model, neededRoutes(model)))
         : chooseOpeningAction(model),
   })
+
+const FALLBACK_ACTIONS: ReadonlyArray<PlayerAction> = [
+  PlayerAction.DrewFromDeck(),
+  PlayerAction.DrewTicket(),
+  PlayerAction.Passed(),
+]
+
+// NOTE: A bot must never stall a game. If its chosen action is rejected, it
+// falls back to the simplest legal moves, and as a last resort the turn is
+// left unchanged so the caller can see nothing happened.
+export const playBotStep = (model: Model): Model =>
+  pipe(
+    Array.prepend(FALLBACK_ACTIONS, decideBotAction(model)),
+    Array.findFirst(action => Result.getSuccess(applyAction(model, action))),
+    Option.getOrElse(() => model),
+  )

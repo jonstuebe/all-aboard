@@ -26,3 +26,8 @@ Thumbs.db
 
 # Claude Code worktrees
 .claude/worktrees/
+
+# Cloudflare local state and secrets
+.wrangler/
+.dev.vars
+.dev.vars.*
