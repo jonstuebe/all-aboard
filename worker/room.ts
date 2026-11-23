@@ -1,8 +1,10 @@
 import { Array, Option, Result, Schema, pipe } from 'effect'
+import { defineTaggedUnion } from 'foldkit/schema'
 import { modifyFields } from 'foldkit/struct'
 
 import { projectView } from '../src/domain/clientView'
-import { BOT_NAMES, actAs, newGame } from '../src/domain/game'
+import { playBotStep } from '../src/domain/bot'
+import { BOT_NAMES, actAs, isBotTurn, newGame } from '../src/domain/game'
 import { MAX_SEATS, MIN_SEATS, Model, type SeatConfig, TONE_COUNT } from '../src/model'
 import { seatResult, type SeatResult } from '../src/domain/results'
 import {
@@ -551,4 +553,91 @@ export const finishedResults = (
         ),
       ),
   })
+}
+
+// LIFECYCLE
+
+const HOUR_MS = 60 * 60 * 1000
+export const WARN_AFTER_MS = 48 * HOUR_MS
+export const DELETE_AFTER_MS = 72 * HOUR_MS
+export const FINISHED_TTL_MS = 7 * 24 * HOUR_MS
+
+export const REASON_IDLE_GAME = 'Removed after 3 days with no moves.'
+export const REASON_IDLE_LOBBY = 'Removed after 3 days without starting.'
+export const REASON_FINISHED = 'Removed one week after it ended.'
+
+const isBotToMove = (room: Room): boolean =>
+  room.phase === 'Playing' && Option.exists(room.maybeGame, isBotTurn)
+
+// NOTE: One alarm covers everything time-based. It is always set to the
+// earliest of: the next bot move, the 48-hour warning, 72-hour deletion, or
+// one-week deletion of a finished game.
+export const nextAlarmAt = (room: Room, botDelayMs: number): number => {
+  if (room.phase === 'Finished') {
+    return Option.getOrElse(room.maybeFinishedAt, () => room.lastMoveAt) + FINISHED_TTL_MS
+  }
+  const lifecycleAt = Option.isNone(room.maybeWarnedAt)
+    ? room.lastMoveAt + WARN_AFTER_MS
+    : room.lastMoveAt + DELETE_AFTER_MS
+  return isBotToMove(room)
+    ? Math.min(room.lastMoveAt + botDelayMs, lifecycleAt)
+    : lifecycleAt
+}
+
+export const AlarmOutcome = defineTaggedUnion({
+  Unchanged: {},
+  Updated: { room: Room },
+  Warned: { room: Room, deviceIds: Schema.Array(Schema.String) },
+  Deleted: { reason: Schema.String },
+})
+export type AlarmOutcome = typeof AlarmOutcome.Type
+
+// NOTE: Who hears about a game about to be deleted: the player whose turn it
+// is, or the host while it is still a lobby.
+const warnedDeviceIds = (room: Room): ReadonlyArray<string> => {
+  if (room.phase === 'Playing') {
+    return Option.match(
+      Option.flatMap(room.maybeGame, game => Array.get(room.seats, game.currentPlayerIndex)),
+      {
+        onNone: () => [],
+        onSome: seat =>
+          seat.kind === 'Human' && !seat.hasLeft
+            ? Option.toArray(seat.maybeDeviceId)
+            : [],
+      },
+    )
+  }
+  return [room.hostDeviceId]
+}
+
+export const runAlarm = (
+  room: Room,
+  now: number,
+  botDelayMs: number,
+): AlarmOutcome => {
+  if (room.phase === 'Finished') {
+    const expiresAt =
+      Option.getOrElse(room.maybeFinishedAt, () => room.lastMoveAt) + FINISHED_TTL_MS
+    return now >= expiresAt
+      ? AlarmOutcome.Deleted({ reason: REASON_FINISHED })
+      : AlarmOutcome.Unchanged()
+  }
+  const isLobby = isLobbyPhase(room)
+  if (now >= room.lastMoveAt + DELETE_AFTER_MS) {
+    return AlarmOutcome.Deleted({ reason: isLobby ? REASON_IDLE_LOBBY : REASON_IDLE_GAME })
+  }
+  if (isBotToMove(room) && now >= room.lastMoveAt + botDelayMs) {
+    return Option.match(room.maybeGame, {
+      onNone: () => AlarmOutcome.Unchanged(),
+      onSome: game =>
+        AlarmOutcome.Updated({ room: touch(withGame(room, playBotStep(game), now), now) }),
+    })
+  }
+  if (now >= room.lastMoveAt + WARN_AFTER_MS && Option.isNone(room.maybeWarnedAt)) {
+    return AlarmOutcome.Warned({
+      room: modifyFields(room, { maybeWarnedAt: () => Option.some(now) }),
+      deviceIds: warnedDeviceIds(room),
+    })
+  }
+  return AlarmOutcome.Unchanged()
 }

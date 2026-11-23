@@ -13,6 +13,7 @@ import {
 } from '../src/protocol'
 import type { Env } from './env'
 import {
+  AlarmOutcome,
   type Room,
   applyClientMessage,
   createRoom,
@@ -21,7 +22,9 @@ import {
   finishedResults,
   hasHumans,
   menuEntryFor,
+  nextAlarmAt,
   resultKey,
+  runAlarm,
   seatedDeviceIds,
   snapshotFor,
 } from './room'
@@ -84,6 +87,65 @@ export class GameDO extends DurableObject<Env> {
 
   protected now(): number {
     return Date.now() + this.clockOffsetMs
+  }
+
+  private botDelayMs(): number {
+    const parsed = Number(this.env.BOT_DELAY_MS ?? '1500')
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 1500
+  }
+
+  // NOTE: Alarms are set in real time; the test clock offset only shifts
+  // what "now" means inside the room.
+  private async scheduleAlarm(room: Room): Promise<void> {
+    const at = nextAlarmAt(room, this.botDelayMs()) - this.clockOffsetMs
+    await this.ctx.storage.setAlarm(Math.max(at, Date.now()))
+  }
+
+  async alarm(): Promise<void> {
+    await Option.match(this.maybeRoom, {
+      onNone: async () => undefined,
+      onSome: async room =>
+        AlarmOutcome.match(runAlarm(room, this.now(), this.botDelayMs()), {
+          Unchanged: async () => this.scheduleAlarm(room),
+          Updated: async ({ room: next }) => {
+            this.save(next)
+            this.logAction(next, Option.none(), { _tag: 'BotMove' })
+            await this.afterChange(Option.some(room), next)
+          },
+          Warned: async ({ room: next, deviceIds }) => {
+            this.save(next)
+            await this.warn(next, deviceIds)
+            await this.scheduleAlarm(next)
+          },
+          Deleted: async ({ reason }) => this.deleteGame(reason),
+        }),
+    })
+  }
+
+  // NOTE: Sends the 48-hour warning. Push delivery arrives with Web Push.
+  protected async warn(_room: Room, _deviceIds: ReadonlyArray<string>): Promise<void> {}
+
+  // TEST HOOKS
+
+  // NOTE: Only with TEST_HOOKS set (vitest). Moves this game's clock forward
+  // so lifecycle alarms can be tested without waiting days.
+  async testAdvanceClock(ms: number): Promise<number> {
+    if (this.env.TEST_HOOKS !== '1') {
+      throw new Error('Test hooks are off.')
+    }
+    this.clockOffsetMs += ms
+    this.ctx.storage.sql.exec(
+      'INSERT INTO clock (id, offset_ms) VALUES (1, ?) ON CONFLICT (id) DO UPDATE SET offset_ms = excluded.offset_ms',
+      this.clockOffsetMs,
+    )
+    return this.now()
+  }
+
+  async testRoomJson(): Promise<string | null> {
+    if (this.env.TEST_HOOKS !== '1') {
+      throw new Error('Test hooks are off.')
+    }
+    return Option.match(this.maybeRoom, { onNone: () => null, onSome: encodeRoom })
   }
 
   protected save(room: Room): void {
@@ -286,6 +348,8 @@ export class GameDO extends DurableObject<Env> {
     this.broadcast(after)
     if (!hasHumans(after) && (after.phase === 'Lobby' || after.phase === 'RematchLobby')) {
       await this.deleteGame('Everyone left the lobby.')
+    } else {
+      await this.scheduleAlarm(after)
     }
   }
 
