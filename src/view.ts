@@ -414,10 +414,6 @@ const claimPanelView = (model: Model, h: HtmlBuilder<Message>): Html =>
     onNone: () => h.empty,
     onSome: route => {
       const isClaimable = isRouteClaimableByHuman(model, route.id)
-      const maybeTwin = pipe(
-        Option.fromNullishOr(route.twin),
-        Option.flatMap(maybeRouteById),
-      )
       return h.div(
         [
           h.Class('claim-panel'),
@@ -465,18 +461,6 @@ const claimPanelView = (model: Model, h: HtmlBuilder<Message>): Html =>
                     ['Claim'],
                   )
                 : h.empty,
-              Option.match(maybeTwin, {
-                onNone: () => h.empty,
-                onSome: twin =>
-                  h.button(
-                    [
-                      h.Class('btn btn-cream'),
-                      h.Type('button'),
-                      h.OnClick(Message.ClickedRoute({ routeId: twin.id })),
-                    ],
-                    [`${GLYPHS[twin.color]} Other track`],
-                  ),
-              }),
               h.button(
                 [
                   h.Class('btn btn-cream'),
