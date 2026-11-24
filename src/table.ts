@@ -15,6 +15,7 @@ export type DockTab = typeof DockTab.Type
 
 export const TableUi = Schema.Struct({
   maybeHoveredRouteId: Schema.Option(Schema.String),
+  maybeSelectedRouteId: Schema.Option(Schema.String),
   maybeNotice: Schema.Option(Schema.String),
   dockTab: DockTab,
   returnedTicketIds: Schema.Array(Schema.String),
@@ -23,6 +24,7 @@ export type TableUi = typeof TableUi.Type
 
 export const emptyTableUi: TableUi = {
   maybeHoveredRouteId: Option.none(),
+  maybeSelectedRouteId: Option.none(),
   maybeNotice: Option.none(),
   dockTab: 'Draw',
   returnedTicketIds: [],

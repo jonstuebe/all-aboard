@@ -8,6 +8,7 @@ import {
   ROUTES,
   STARTING_TRAINS,
   WILD_CARDS,
+  routeById,
 } from './board'
 import { playBotStep } from './bot'
 import {
@@ -15,6 +16,7 @@ import {
   actAs,
   applyAction,
   canDrawFromDeck,
+  isRouteClosedFor,
   localSeats,
   maybeTurnStep,
   newGame,
@@ -226,6 +228,44 @@ describe('turn rules', () => {
       Array.forEach(start.players, player =>
         expect(player.offeredTicketIds).toHaveLength(3),
       )
+    })
+  })
+})
+
+describe('double tracks', () => {
+  const twinPairs = Array.filter(ROUTES, route => route.lane === -1)
+  const withClaim = (seatCount: number, playerIndex: number): Model => ({
+    ...newGame(5, allBots(seatCount)),
+    claims: [{ routeId: 'r10', playerIndex }],
+  })
+
+  test('the second track stays closed with fewer than 4 players', () => {
+    const model = withClaim(3, 1)
+    expect(isRouteClosedFor(model, 0, routeById('r11'))).toBe(true)
+  })
+
+  test('the second track opens with 4 or more players, but not to its twin owner', () => {
+    const model = withClaim(4, 1)
+    expect(isRouteClosedFor(model, 0, routeById('r11'))).toBe(false)
+    expect(isRouteClosedFor(model, 1, routeById('r11'))).toBe(true)
+  })
+
+  test.each([
+    [3, 3],
+    [21, 3],
+    [8, 4],
+    [33, 5],
+  ])('bots respect the pair rules (seed %i, %i seats)', (seed, seatCount) => {
+    const final = Option.getOrThrow(Array.last(playOut(seed, seatCount)))
+    const ownerOf = (routeId: string) =>
+      Array.findFirst(final.claims, claim => claim.routeId === routeId)
+    Array.forEach(twinPairs, route => {
+      const pair = [ownerOf(route.id), ownerOf(route.twin ?? '')]
+      const owners = Array.getSomes(pair).map(claim => claim.playerIndex)
+      if (seatCount < 4) {
+        expect(owners.length).toBeLessThanOrEqual(1)
+      }
+      expect(new Set(owners).size).toBe(owners.length)
     })
   })
 })

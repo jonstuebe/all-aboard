@@ -62,6 +62,8 @@ export const Message = defineMessageUnion({
   ClickedDeck: {},
   ClickedMarketCard: { slot: Schema.Number },
   ClickedRoute: { routeId: Schema.String },
+  ConfirmedClaimRoute: { routeId: Schema.String },
+  CancelledClaimRoute: {},
   ClickedDrawTicket: {},
   ToggledOfferedTicket: { ticketId: Schema.String },
   ClickedKeepTickets: { ticketIds: Schema.Array(Schema.String) },

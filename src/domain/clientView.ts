@@ -6,6 +6,7 @@ import {
   type Payment,
   countCards,
   findPayment,
+  isRouteClosedFor,
   isTicketComplete,
   ticketsToKeep,
 } from './game'
@@ -148,6 +149,7 @@ export const maybeViewerPayment = (
   Option.flatMap(viewer(view), player =>
     Option.flatMap(maybeRouteById(routeId), route =>
       Option.isSome(maybeRouteOwner(view, routeId)) ||
+      isRouteClosedFor(view, view.viewerIndex, route) ||
       player.trains < route.length
         ? Option.none()
         : findPayment(player.hand, route),

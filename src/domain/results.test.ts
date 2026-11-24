@@ -35,26 +35,27 @@ const playOut = (seed: number): Model => {
 
 describe('longest route', () => {
   test('follows one continuous trail and ignores branches', () => {
-    // Seattle-Helena (2), Helena-Chicago (3), Chicago-New York (3), plus a
-    // branch Helena-Denver (2): the longest trail is 2 + 3 + 3 = 8.
+    // Seattle-Helena (2), Helena-Chicago (4), Chicago-New York (3), plus a
+    // branch Helena-Denver (2): the longest trail is 2 + 4 + 3 = 9.
     const model = withClaims([
       ['r1', 0],
-      ['r4', 0],
-      ['r6', 0],
       ['r5', 0],
+      ['r25', 0],
+      ['r6', 0],
       ['r2', 1],
     ])
-    expect(longestRoute(model, 0)).toBe(8)
+    expect(longestRoute(model, 0)).toBe(9)
     expect(longestRoute(model, 1)).toBe(3)
   })
 
   test('a loop can be walked all the way round', () => {
-    // Seattle-Helena (2), Helena-Denver (2), Denver-Seattle (3) = 7.
+    // Seattle-Helena (2), Helena-Salt Lake City (2), Salt Lake City-Seattle
+    // (3) = 7.
     expect(
       longestRoute(
         withClaims([
           ['r1', 0],
-          ['r5', 0],
+          ['r4', 0],
           ['r2', 0],
         ]),
         0,

@@ -18,6 +18,7 @@ import {
   canTakeMarketCard,
   countCards,
   currentPlayer,
+  isRouteClosedFor,
   isTicketComplete,
   marketCardAt,
   maybeClaimPayment,
@@ -40,7 +41,10 @@ const routeCost = (
   route: Route,
 ): Option.Option<number> =>
   Option.match(maybeRouteOwner(model, route.id), {
-    onNone: () => Option.some(route.length),
+    onNone: () =>
+      isRouteClosedFor(model, playerIndex, route)
+        ? Option.none()
+        : Option.some(route.length),
     onSome: owner => (owner === playerIndex ? Option.some(0) : Option.none()),
   })
 

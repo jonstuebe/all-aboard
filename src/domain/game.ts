@@ -256,6 +256,35 @@ export const maybeRouteOwner = (
     Option.map(claim => claim.playerIndex),
   )
 
+// NOTE: Second tracks open only with 4 or more players. With fewer, claiming
+// either track of a pair closes the other. Nobody may own both tracks.
+export const DOUBLE_TRACK_MIN_SEATS = 4
+
+export type HasTable = Readonly<{
+  claims: Model['claims']
+  players: ReadonlyArray<unknown>
+}>
+
+export const maybeTwinOwner = (
+  model: HasClaims,
+  route: Route,
+): Option.Option<number> =>
+  pipe(
+    Option.fromNullishOr(route.twin),
+    Option.flatMap(twinId => maybeRouteOwner(model, twinId)),
+  )
+
+export const isRouteClosedFor = (
+  model: HasTable,
+  playerIndex: number,
+  route: Route,
+): boolean =>
+  Option.match(maybeTwinOwner(model, route), {
+    onNone: () => false,
+    onSome: owner =>
+      owner === playerIndex || model.players.length < DOUBLE_TRACK_MIN_SEATS,
+  })
+
 // PAYMENT
 
 export type Payment = Readonly<{
@@ -302,6 +331,9 @@ export const maybeClaimPayment = (
   if (Option.isSome(maybeRouteOwner(model, routeId))) {
     return Option.none()
   }
+  if (isRouteClosedFor(model, playerIndex, route)) {
+    return Option.none()
+  }
   if (player.trains < route.length) {
     return Option.none()
   }
@@ -320,11 +352,20 @@ export const claimBlockReason = (
     onSome: owner =>
       `${playerAt(model, owner).name} already owns ${routeName}.`,
     onNone: () =>
-      player.trains < route.length
+      Option.match(maybeTwinOwner(model, route), {
+        onSome: owner =>
+          owner === playerIndex
+            ? `You already own the other track of ${routeName}.`
+            : model.players.length < DOUBLE_TRACK_MIN_SEATS
+              ? `The second track of ${routeName} opens only with 4 or more players.`
+              : '',
+        onNone: () => '',
+      }) ||
+      (player.trains < route.length
         ? `${routeName} needs ${route.length} trains and you have ${player.trains}.`
         : route.color === 'Gray'
           ? `${routeName} needs ${route.length} cards of one color. Wilds fill gaps.`
-          : `${routeName} needs ${route.length} ${route.color} cards. Wilds fill gaps.`,
+          : `${routeName} needs ${route.length} ${route.color} cards. Wilds fill gaps.`),
   })
 }
 

@@ -274,9 +274,15 @@ const enginePiece = (angle: number, length: number, mark: string): string => {
     `<circle class="piece-lamp" cx="${fixed(half - 2.5)}" cy="0" r="2.2"/>`,
     `<rect class="piece-body" x="${fixed(-half)}" y="${-PIECE_HALF_WIDTH}" width="${fixed(cabLength)}" height="${PIECE_HALF_WIDTH * 2}" rx="3.5"/>`,
     `<rect class="piece-edge" x="${fixed(-half)}" y="${-PIECE_HALF_WIDTH}" width="${fixed(cabLength)}" height="${PIECE_HALF_WIDTH * 2}" rx="3.5"/>`,
-    `<g transform="translate(${fixed(-half + cabLength / 2)} 0)">${uprightMark(angle, 'piece-badge', 7.5, mark)}</g>`,
+    `<g transform="translate(${fixed(-half + cabLength / 2)} 0)">${uprightMark(angle, 'piece-badge', 11, mark)}</g>`,
   ])
 }
+
+// NOTE: Track and pieces are drawn at full size and then scaled down by
+// TRACK_SCALE, so a route reads as a slim line of cars on a crowded map.
+// Only the middle slot of open track carries the color glyph, and only the
+// engine carries its owner's initial.
+export const TRACK_SCALE = 0.6
 
 export const routeArt = ({
   slotCenters,
@@ -285,34 +291,39 @@ export const routeArt = ({
   mark,
   isOwned,
 }: RouteArtInput): string => {
-  const section = trackSection(slotLength)
-  const pieceLength = slotLength - 3
-  const lastIndex = slotCenters.length - 1
+  const artCenters = Array.map(slotCenters, center => center / TRACK_SCALE)
+  const artLength = slotLength / TRACK_SCALE
+  const section = trackSection(artLength)
+  const pieceLength = artLength - 3
+  const lastIndex = artCenters.length - 1
+  const markIndex = Math.floor(lastIndex / 2)
   const track = joinMarkup(
     Array.map(
-      slotCenters,
-      center =>
-        `<g transform="translate(${fixed(center)} 0)">${section}${isOwned ? '' : uprightMark(angle, 'track-plate', 9.5, mark)}</g>`,
+      artCenters,
+      (center, index) =>
+        `<g transform="translate(${fixed(center)} 0)">${section}${isOwned || index !== markIndex ? '' : uprightMark(angle, 'track-plate', 13, mark)}</g>`,
     ),
   )
+  const scaled = (markup: string): string =>
+    `<g transform="scale(${TRACK_SCALE})">${markup}</g>`
   if (!isOwned) {
-    return track
+    return scaled(track)
   }
-  const firstCenter = slotCenters[0] ?? 0
-  const lastCenter = slotCenters[lastIndex] ?? firstCenter
+  const firstCenter = artCenters[0] ?? 0
+  const lastCenter = artCenters[lastIndex] ?? firstCenter
   const coupling = `<line class="piece-coupling" x1="${fixed(firstCenter)}" y1="0" x2="${fixed(lastCenter)}" y2="0"/>`
   const pieces = joinMarkup(
     Array.map(
-      slotCenters,
+      artCenters,
       (center, index) =>
         `<g transform="translate(${fixed(center)} 0)">${
           index === lastIndex
             ? enginePiece(angle, pieceLength, mark)
-            : wagonPiece(angle, pieceLength, mark)
+            : wagonPiece(angle, pieceLength, '')
         }</g>`,
     ),
   )
-  return track + coupling + pieces
+  return scaled(track + coupling + pieces)
 }
 
 // STATION

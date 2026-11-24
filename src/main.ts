@@ -504,6 +504,16 @@ const modifyHoveredRoute = (
     modifyFields(ui, { maybeHoveredRouteId: () => maybeRouteId }),
   )
 
+// NOTE: Tapping a route only selects it. The claim panel on the map then asks
+// to confirm, so a slip of the thumb on a crowded board costs nothing.
+const modifySelectedRoute = (
+  model: Model,
+  maybeRouteId: Option.Option<string>,
+): UpdateReturn =>
+  modifyTableUi(model, ui =>
+    modifyFields(ui, { maybeSelectedRouteId: () => maybeRouteId }),
+  )
+
 const scheduleReconnect = (model: Model, game: OnlineGame): UpdateReturn =>
   wantsSocket(game)
     ? {
@@ -815,7 +825,15 @@ const updateModel = (model: Model, message: Message) =>
       takeTableAction(model, PlayerAction.TookMarketCard({ slot })),
 
     ClickedRoute: ({ routeId }) =>
-      takeTableAction(model, PlayerAction.ClaimedRoute({ routeId })),
+      modifySelectedRoute(model, Option.some(routeId)),
+
+    ConfirmedClaimRoute: ({ routeId }) =>
+      takeTableAction(
+        modifySelectedRoute(model, Option.none()).model,
+        PlayerAction.ClaimedRoute({ routeId }),
+      ),
+
+    CancelledClaimRoute: () => modifySelectedRoute(model, Option.none()),
 
     ClickedDrawTicket: () => takeTableAction(model, PlayerAction.DrewTicket()),
 
@@ -980,6 +998,7 @@ const updateModel = (model: Model, message: Message) =>
     PressedKey: ({ key }) =>
       Match.value(key.toLowerCase()).pipe(
         Match.withReturnType<UpdateReturn>(),
+        Match.when('escape', () => modifySelectedRoute(model, Option.none())),
         Match.when('d', () =>
           takeTableAction(model, PlayerAction.DrewFromDeck()),
         ),

@@ -20,6 +20,7 @@ import {
   type Route,
   type RouteColor,
   cityById,
+  maybeRouteById,
   routeById,
   routePoints,
   ticketById,
@@ -39,6 +40,11 @@ import {
   maybeViewerTicketOffer,
   viewerHasAnyMove,
 } from './domain/clientView'
+import {
+  DOUBLE_TRACK_MIN_SEATS,
+  type Payment,
+  maybeTwinOwner,
+} from './domain/game'
 import { AnimateHandRow, HAND_CARD_DATA } from './handMotion'
 import {
   AnimateMarketRow,
@@ -62,8 +68,10 @@ type Model = Table
 // CONSTANTS
 
 export const BOARD_VIEW_BOX = '40 30 920 566'
-const TICKET_RING_RADIUS = 25
-const ROUTE_INSET = 24
+const TICKET_RING_RADIUS = 20
+const ROUTE_INSET = 19
+const DOUBLE_TRACK_HALF_GAP = 8
+export const DEPOT_SCALE = 0.75
 const SLOT_GAP = 6
 const LOG_LENGTH = 6
 
@@ -95,6 +103,10 @@ export const LABEL_PLACEMENTS: Record<string, LabelPlacement> = {
   losangeles: { dx: 0, dy: 50, anchor: 'middle' },
   dallas: { dx: 0, dy: 50, anchor: 'middle' },
   miami: { dx: 27, dy: 9, anchor: 'start' },
+  saltlake: { dx: -24, dy: 8, anchor: 'end' },
+  kansascity: { dx: 2, dy: -34, anchor: 'start' },
+  neworleans: { dx: 0, dy: 50, anchor: 'middle' },
+  pittsburgh: { dx: 4, dy: 48, anchor: 'middle' },
 }
 
 export const DEFAULT_PLACEMENT: LabelPlacement = {
@@ -120,8 +132,14 @@ export const cityPair = (from: string, to: string): string =>
 // BOARD
 
 export const routeGeometry = (route: Route) => {
-  const from = cityById(route.from)
-  const to = cityById(route.to)
+  const fromCity = cityById(route.from)
+  const toCity = cityById(route.to)
+  const rawDistance = Math.hypot(toCity.x - fromCity.x, toCity.y - fromCity.y)
+  const shift = (route.lane ?? 0) * DOUBLE_TRACK_HALF_GAP
+  const normalX = (-(toCity.y - fromCity.y) / rawDistance) * shift
+  const normalY = ((toCity.x - fromCity.x) / rawDistance) * shift
+  const from = { ...fromCity, x: fromCity.x + normalX, y: fromCity.y + normalY }
+  const to = { ...toCity, x: toCity.x + normalX, y: toCity.y + normalY }
   const deltaX = to.x - from.x
   const deltaY = to.y - from.y
   const distance = Math.hypot(deltaX, deltaY)
@@ -166,6 +184,7 @@ const routeView = (
   const maybeOwner = maybeRouteOwner(model, route.id)
   const isClaimable = isRouteClaimableByHuman(model, route.id)
   const isHovered = Option.contains(model.maybeHoveredRouteId, route.id)
+  const isSelected = Option.contains(model.maybeSelectedRouteId, route.id)
   const stateClass = Option.match(maybeOwner, {
     onSome: owner => `route is-owned ${seatTone(model, owner)}`,
     onNone: () =>
@@ -185,7 +204,9 @@ const routeView = (
   return h.keyed('g')(
     route.id,
     [
-      h.Class(`${stateClass}${isHovered ? ' is-hovered' : ''}`),
+      h.Class(
+        `${stateClass}${isHovered ? ' is-hovered' : ''}${isSelected ? ' is-selected' : ''}`,
+      ),
       h.Role('button'),
       h.Tabindex(0),
       h.AriaLabel(routeLabel(model, route)),
@@ -271,7 +292,7 @@ const cityView = (model: Model, city: City, h: HtmlBuilder<Message>): Html => {
       }),
       h.g([
         h.Class('depot'),
-        h.Transform(`translate(${city.x} ${city.y})`),
+        h.Transform(`translate(${city.x} ${city.y}) scale(${DEPOT_SCALE})`),
         h.InnerHTML(DEPOT_ART),
       ]),
       h.text(
@@ -310,6 +331,7 @@ const boardView = (model: Model, h: HtmlBuilder<Message>): Html =>
           ),
         ],
       ),
+      claimPanelView(model, h),
       h.button(
         [
           h.Class('map-reset'),
@@ -320,6 +342,128 @@ const boardView = (model: Model, h: HtmlBuilder<Message>): Html =>
       ),
     ],
   )
+
+const paymentText = (payment: Payment): string =>
+  payment.wilds === 0
+    ? `${payment.colored} ${payment.color}`
+    : payment.colored === 0
+      ? `${payment.wilds} Wild`
+      : `${payment.colored} ${payment.color} + ${payment.wilds} Wild`
+
+// NOTE: Why the viewer can't claim a route, in plain words, for the claim
+// panel. Only called when there is no payment for it.
+const claimRefusal = (model: Model, route: Route): string =>
+  Option.match(maybeRouteOwner(model, route.id), {
+    onSome: owner => `Owned by ${model.players[owner]?.name ?? 'someone'}.`,
+    onNone: () => {
+      const twinNote = Option.match(maybeTwinOwner(model, route), {
+        onNone: () => Option.none<string>(),
+        onSome: owner =>
+          owner === model.viewerIndex
+            ? Option.some('You already own the other track.')
+            : model.players.length < DOUBLE_TRACK_MIN_SEATS
+              ? Option.some(
+                  'The second track opens only with 4 or more players.',
+                )
+              : Option.none(),
+      })
+      const trains = model.players[model.viewerIndex]?.trains ?? 0
+      return Option.getOrElse(twinNote, () =>
+        !isHumanTurn(model)
+          ? 'You can claim it on your turn.'
+          : !Option.contains(maybeTurnStep(model), 'ChoosingAction')
+            ? 'Finish drawing cards first.'
+            : trains < route.length
+              ? `Needs ${route.length} trains; you have ${trains}.`
+              : route.color === 'Gray'
+                ? `Needs ${route.length} cards of one color.`
+                : `Needs ${route.length} ${route.color} cards.`,
+      )
+    },
+  })
+
+const claimPanelView = (model: Model, h: HtmlBuilder<Message>): Html =>
+  Option.match(Option.flatMap(model.maybeSelectedRouteId, maybeRouteById), {
+    onNone: () => h.empty,
+    onSome: route => {
+      const isClaimable = isRouteClaimableByHuman(model, route.id)
+      const maybeTwin = pipe(
+        Option.fromNullishOr(route.twin),
+        Option.flatMap(maybeRouteById),
+      )
+      return h.div(
+        [
+          h.Class('claim-panel'),
+          h.Role('dialog'),
+          h.AriaLabel(`Claim ${cityPair(route.from, route.to)}`),
+        ],
+        [
+          h.div(
+            [h.Class('claim-panel-head')],
+            [
+              h.strong([], [cityPair(route.from, route.to)]),
+              h.span(
+                [h.Class(`chip color-${route.color.toLowerCase()}`)],
+                [
+                  `${GLYPHS[route.color]} ${route.length} × ${colorName(route.color)}`,
+                ],
+              ),
+              h.span([], [`${routePoints(route.length)} pts`]),
+            ],
+          ),
+          h.p(
+            [h.Class('claim-panel-note')],
+            [
+              Option.match(maybeViewerPayment(model, route.id), {
+                onSome: payment =>
+                  isClaimable
+                    ? `Pay ${paymentText(payment)}.`
+                    : claimRefusal(model, route),
+                onNone: () => claimRefusal(model, route),
+              }),
+            ],
+          ),
+          h.div(
+            [h.Class('claim-panel-actions')],
+            [
+              isClaimable
+                ? h.button(
+                    [
+                      h.Class('btn btn-green'),
+                      h.Type('button'),
+                      h.OnClick(
+                        Message.ConfirmedClaimRoute({ routeId: route.id }),
+                      ),
+                    ],
+                    ['Claim'],
+                  )
+                : h.empty,
+              Option.match(maybeTwin, {
+                onNone: () => h.empty,
+                onSome: twin =>
+                  h.button(
+                    [
+                      h.Class('btn btn-cream'),
+                      h.Type('button'),
+                      h.OnClick(Message.ClickedRoute({ routeId: twin.id })),
+                    ],
+                    [`${GLYPHS[twin.color]} Other track`],
+                  ),
+              }),
+              h.button(
+                [
+                  h.Class('btn btn-cream'),
+                  h.Type('button'),
+                  h.OnClick(Message.CancelledClaimRoute()),
+                ],
+                ['Cancel'],
+              ),
+            ],
+          ),
+        ],
+      )
+    },
+  })
 
 const routeReadoutView = (model: Model, h: HtmlBuilder<Message>): Html =>
   Option.match(model.maybeHoveredRouteId, {

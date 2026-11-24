@@ -29,9 +29,11 @@ import {
   playerRecap,
   revealOrder,
 } from '../recap'
+import type { SoundSetting } from '../soundSetting'
 import {
   BOARD_VIEW_BOX,
   DEFAULT_PLACEMENT,
+  DEPOT_SCALE,
   GLYPHS,
   LABEL_PLACEMENTS,
   cardFace,
@@ -40,7 +42,6 @@ import {
   playerTone,
   routeGeometry,
 } from '../view'
-import type { SoundSetting } from '../soundSetting'
 import { screenFrame } from './frame'
 import { toneName } from './lobby'
 
@@ -269,12 +270,12 @@ const watchCityView = (focus: BoardFocus, city: City, h: H): Html => {
             ),
             h.Cx(String(city.x)),
             h.Cy(String(city.y)),
-            h.R('25'),
+            h.R('20'),
           ]),
       }),
       h.g([
         h.Class('depot'),
-        h.Transform(`translate(${city.x} ${city.y})`),
+        h.Transform(`translate(${city.x} ${city.y}) scale(${DEPOT_SCALE})`),
         h.InnerHTML(DEPOT_ART),
       ]),
       h.text(
@@ -403,11 +404,7 @@ const finalChip = (view: ClientView, h: H): Html =>
     },
   )
 
-const watchHeader = (
-  table: WatchTable,
-  sound: SoundSetting,
-  h: H,
-): Html =>
+const watchHeader = (table: WatchTable, sound: SoundSetting, h: H): Html =>
   h.header(
     [h.Class('topbar watch-topbar')],
     [

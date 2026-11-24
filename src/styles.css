@@ -778,7 +778,7 @@ button {
 
 .route-hit {
   stroke: transparent;
-  stroke-width: 44;
+  stroke-width: 30;
   stroke-linecap: round;
   pointer-events: stroke;
 }
@@ -786,7 +786,7 @@ button {
 .route.is-claimable .route-hit {
   stroke: var(--signal);
   stroke-opacity: 0.55;
-  stroke-width: 38;
+  stroke-width: 22;
   animation: claimable 1.5s var(--ease-out) infinite alternate;
 }
 
@@ -833,7 +833,7 @@ button {
 
 .route-mark {
   font-family: system-ui, sans-serif;
-  font-size: 11px;
+  font-size: 16px;
   font-weight: 700;
   fill: var(--route-ink, var(--route-color));
   pointer-events: none;
@@ -866,6 +866,94 @@ button {
 .route:focus-visible .track-bed {
   stroke: var(--ink);
   stroke-width: 3.6;
+}
+
+/* The route waiting in the claim panel: an ink outline and a steady gold
+   glow, so it stays findable among its neighbours and its twin. */
+.route.is-selected .route-hit {
+  stroke: var(--signal);
+  stroke-opacity: 0.8;
+  stroke-width: 22;
+  animation: none;
+}
+
+.route.is-selected .track-bed {
+  stroke: var(--ink);
+  stroke-width: 4;
+}
+
+/* CLAIM PANEL */
+
+.claim-panel {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  translate: -50% 0;
+  width: min(420px, calc(100% - 36px));
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px 16px;
+  border-radius: 6px;
+  border: 1px solid #55400f;
+  background: var(--paper-light);
+  color: var(--ink);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.6),
+    0 10px 24px rgb(0 0 0 / 0.45);
+}
+
+.claim-panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+
+.claim-panel-head strong {
+  font-family: var(--font-engraved);
+  font-weight: 400;
+  font-size: 1.15rem;
+  letter-spacing: 0.02em;
+}
+
+.claim-panel-note {
+  margin: 0;
+  color: var(--ink-muted);
+}
+
+.claim-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.claim-panel-actions .btn {
+  flex: 1 1 auto;
+  min-height: 42px;
+  padding: 0 14px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .claim-panel {
+    animation: claim-panel-in 180ms var(--ease-out);
+  }
+}
+
+@keyframes claim-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+/* On a phone the map is too short to cover, so the panel sits under it. */
+@media (max-width: 700px) {
+  .claim-panel {
+    position: static;
+    translate: none;
+    width: auto;
+    margin-top: 10px;
+  }
 }
 
 /* TRAIN PIECES */
@@ -938,7 +1026,7 @@ button {
 .route.is-owned .route-mark {
   fill: var(--ink);
   font-family: var(--font-body);
-  font-size: 11.5px;
+  font-size: 16px;
 }
 
 /* STATIONS */
