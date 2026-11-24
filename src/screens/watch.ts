@@ -33,11 +33,11 @@ import type { SoundSetting } from '../soundSetting'
 import {
   BOARD_VIEW_BOX,
   DEFAULT_PLACEMENT,
-  cityLabelView,
   DEPOT_SCALE,
   GLYPHS,
   LABEL_PLACEMENTS,
   cardFace,
+  cityLabelView,
   cityPair,
   initialOf,
   playerTone,
