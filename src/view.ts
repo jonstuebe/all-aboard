@@ -87,10 +87,13 @@ export const GLYPHS: Record<RouteColor | 'Wild', string> = {
 
 const CARD_ORDER: ReadonlyArray<Card> = [...CARD_COLORS, 'Wild']
 
+// NOTE: dy places the baseline of the label's last line. A stacked label
+// puts each word on its own line, growing upward, to fit a tight spot.
 type LabelPlacement = Readonly<{
   dx: number
   dy: number
   anchor: 'start' | 'middle' | 'end'
+  isStacked?: boolean
 }>
 
 export const LABEL_PLACEMENTS: Record<string, LabelPlacement> = {
@@ -98,21 +101,53 @@ export const LABEL_PLACEMENTS: Record<string, LabelPlacement> = {
   helena: { dx: 0, dy: -31, anchor: 'middle' },
   chicago: { dx: 0, dy: -31, anchor: 'middle' },
   newyork: { dx: 0, dy: -31, anchor: 'middle' },
-  denver: { dx: 12, dy: -36, anchor: 'start' },
+  denver: { dx: 2, dy: -36, anchor: 'start' },
   atlanta: { dx: -6, dy: 50, anchor: 'middle' },
   losangeles: { dx: 0, dy: 50, anchor: 'middle' },
   dallas: { dx: 0, dy: 50, anchor: 'middle' },
   miami: { dx: 27, dy: 9, anchor: 'start' },
   saltlake: { dx: -24, dy: 8, anchor: 'end' },
-  kansascity: { dx: 2, dy: -34, anchor: 'start' },
+  kansascity: { dx: -2, dy: -22, anchor: 'middle', isStacked: true },
   neworleans: { dx: 0, dy: 50, anchor: 'middle' },
-  pittsburgh: { dx: 4, dy: 48, anchor: 'middle' },
+  pittsburgh: { dx: 0, dy: 44, anchor: 'middle' },
 }
 
 export const DEFAULT_PLACEMENT: LabelPlacement = {
   dx: 0,
   dy: 48,
   anchor: 'middle',
+}
+
+const LABEL_LINE_HEIGHT_EM = 1.05
+
+export const cityLabelView = <M>(
+  city: City,
+  placement: LabelPlacement,
+  h: HtmlBuilder<M>,
+): Html => {
+  const lines = placement.isStacked ? city.name.split(' ') : [city.name]
+  const x = String(city.x + placement.dx)
+  return h.text(
+    [
+      h.Class('city-label'),
+      h.X(x),
+      h.Y(String(city.y + placement.dy)),
+      h.TextAnchor(placement.anchor),
+    ],
+    Array.map(lines, (line, index) =>
+      h.tspan(
+        [
+          h.X(x),
+          h.Dy(
+            index === 0
+              ? `${-(lines.length - 1) * LABEL_LINE_HEIGHT_EM}em`
+              : `${LABEL_LINE_HEIGHT_EM}em`,
+          ),
+        ],
+        [line],
+      ),
+    ),
+  )
 }
 
 export const colorName = (card: Card | RouteColor): string =>
@@ -295,15 +330,7 @@ const cityView = (model: Model, city: City, h: HtmlBuilder<Message>): Html => {
         h.Transform(`translate(${city.x} ${city.y}) scale(${DEPOT_SCALE})`),
         h.InnerHTML(DEPOT_ART),
       ]),
-      h.text(
-        [
-          h.Class('city-label'),
-          h.X(String(city.x + placement.dx)),
-          h.Y(String(city.y + placement.dy)),
-          h.TextAnchor(placement.anchor),
-        ],
-        [city.name],
-      ),
+      cityLabelView(city, placement, h),
     ],
   )
 }

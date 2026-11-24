@@ -33,6 +33,7 @@ import type { SoundSetting } from '../soundSetting'
 import {
   BOARD_VIEW_BOX,
   DEFAULT_PLACEMENT,
+  cityLabelView,
   DEPOT_SCALE,
   GLYPHS,
   LABEL_PLACEMENTS,
@@ -278,15 +279,7 @@ const watchCityView = (focus: BoardFocus, city: City, h: H): Html => {
         h.Transform(`translate(${city.x} ${city.y}) scale(${DEPOT_SCALE})`),
         h.InnerHTML(DEPOT_ART),
       ]),
-      h.text(
-        [
-          h.Class('city-label'),
-          h.X(String(city.x + placement.dx)),
-          h.Y(String(city.y + placement.dy)),
-          h.TextAnchor(placement.anchor),
-        ],
-        [city.name],
-      ),
+      cityLabelView(city, placement, h),
     ],
   )
 }

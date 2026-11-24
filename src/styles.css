@@ -1104,7 +1104,7 @@ button {
 
 .city-label {
   font-family: var(--font-engraved);
-  font-size: 23px;
+  font-size: 20px;
   letter-spacing: 0.03em;
   fill: var(--ink);
   paint-order: stroke;
@@ -2593,8 +2593,8 @@ button.card.deck:hover:not(:disabled) {
   }
 
   .city-label {
-    font-size: 29px;
-    stroke-width: 7px;
+    font-size: 25px;
+    stroke-width: 6px;
   }
 
   .mark {

@@ -69,7 +69,7 @@ export const CITIES: ReadonlyArray<City> = [
   { id: 'saltlake', name: 'Salt Lake City', x: 267, y: 223 },
   { id: 'kansascity', name: 'Kansas City', x: 521, y: 253 },
   { id: 'neworleans', name: 'New Orleans', x: 587, y: 424 },
-  { id: 'pittsburgh', name: 'Pittsburgh', x: 734, y: 229 },
+  { id: 'pittsburgh', name: 'Pittsburgh', x: 734, y: 246 },
 ]
 
 export const cityById = (cityId: string): City =>
@@ -237,7 +237,6 @@ export const ROUTES: ReadonlyArray<Route> = [
     lane: 1,
   },
   { id: 'r31', from: 'pittsburgh', to: 'atlanta', length: 2, color: 'Green' },
-  { id: 'r32', from: 'atlanta', to: 'newyork', length: 3, color: 'Black' },
   {
     id: 'r33',
     from: 'atlanta',
