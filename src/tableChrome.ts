@@ -120,6 +120,7 @@ export const tableMenuView = (
       ],
       Online: ({ ping }) => [
         pingMenuItem(ping, h),
+        menuItem('Share watch link', Message.ClickedShareWatch(), h),
         menuItem('Main menu', Message.ClickedMenu(), h),
         table.phase._tag === 'Playing'
           ? menuItem('Leave game', Message.ClickedLeaveGame(), h, {

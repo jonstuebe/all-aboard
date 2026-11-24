@@ -112,7 +112,6 @@ import {
 import { lobbyView, messageScreen } from './screens/lobby'
 import { menuView } from './screens/menu'
 import { watchLobbyView, watchTableView } from './screens/watch'
-import { TableMode, type TableUi, makeTable } from './table'
 import {
   AudioOutput,
   type AudioOutputService,
@@ -123,6 +122,7 @@ import {
   recapCues,
   releaseAudio,
 } from './sound'
+import { TableMode, type TableUi, makeTable } from './table'
 import { tableView } from './view'
 import {
   ScreenWakeLock,
@@ -266,6 +266,30 @@ export const ShareInvite = Command.define('ShareInvite', {
     }).pipe(
       Effect.catch(() => Effect.void),
       Effect.as(Message.CompletedShareInvite()),
+    ),
+})
+
+// NOTE: Opens the phone's share sheet (AirDrop, Messages) with the game's watch
+// page, for an iPad or laptop to show the table. Copies the link where there is
+// no share sheet.
+export const ShareWatchLink = Command.define('ShareWatchLink', {
+  args: { code: Schema.String },
+  messages: [Message.CompletedShareWatch],
+  execute: ({ code }) =>
+    Effect.tryPromise(async () => {
+      const url = `${location.origin}${watchPath(code)}`
+      if (typeof navigator.share === 'function') {
+        await navigator.share({
+          title: 'All Aboard',
+          text: `Watch our All Aboard game: ${code}`,
+          url,
+        })
+      } else {
+        await navigator.clipboard.writeText(url)
+      }
+    }).pipe(
+      Effect.catch(() => Effect.void),
+      Effect.as(Message.CompletedShareWatch()),
     ),
 })
 
@@ -1056,6 +1080,14 @@ const updateModel = (model: Model, message: Message) =>
       })),
 
     CompletedShareInvite: () => ({ model }),
+
+    ClickedShareWatch: () =>
+      onOnline(model, game => ({
+        model,
+        commands: [ShareWatchLink({ code: game.code })],
+      })),
+
+    CompletedShareWatch: () => ({ model }),
 
     ClickedCopyCode: () =>
       onOnline(model, game => ({

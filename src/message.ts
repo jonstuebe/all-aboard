@@ -63,6 +63,8 @@ export const Message = defineMessageUnion({
   ClickedNewGame: {},
   ClickedMenu: {},
   ClickedPing: {},
+  ClickedShareWatch: {},
+  CompletedShareWatch: {},
   ClickedLeaveGame: {},
   ConfirmedLeaveGame: {},
   CancelledLeaveGame: {},
