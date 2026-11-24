@@ -12,9 +12,9 @@ import {
 import { playBotStep } from './bot'
 import {
   PlayerAction,
+  actAs,
   applyAction,
   canDrawFromDeck,
-  actAs,
   localSeats,
   maybeTurnStep,
   newGame,

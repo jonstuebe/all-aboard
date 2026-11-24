@@ -24,6 +24,7 @@ import { defineTaggedUnion } from 'foldkit/schema'
 import { modifyFields } from 'foldkit/struct'
 import { toString as urlToString } from 'foldkit/url'
 
+import { ReloadApp, appUpdateStream, appUpdateView } from './appUpdate'
 import { CloseConfirmDialog, ShowConfirmDialog } from './confirmDialog'
 import {
   Device,
@@ -152,6 +153,7 @@ export const Model = Schema.Struct({
   maybeConfirmingDelete: Schema.Option(Schema.String),
   now: Schema.Number,
   notifications: NotificationStatus,
+  isUpdateReady: Schema.Boolean,
 })
 export type Model = typeof Model.Type
 
@@ -891,6 +893,18 @@ const updateModel = (model: Model, message: Message) =>
 
     CompletedDeleteGame: () => ({ model, commands: [fetchMenu(model)] }),
 
+    FoundAppUpdate: () => ({
+      model: modifyFields(model, { isUpdateReady: () => true }),
+    }),
+
+    ClickedReloadApp: () => ({ model, commands: [ReloadApp()] }),
+
+    CompletedReloadApp: () => ({ model }),
+
+    DismissedAppUpdate: () => ({
+      model: modifyFields(model, { isUpdateReady: () => false }),
+    }),
+
     TickedClock: ({ now }) => ({
       model: modifyFields(model, { now: () => now }),
     }),
@@ -1227,6 +1241,7 @@ export const init: Runtime.RoutingApplicationInit<Model, Message, Flags> = (
     maybeConfirmingDelete: Option.none(),
     now: initialFlags.now,
     notifications: NotificationStatus.Checking(),
+    isUpdateReady: false,
   }
   const screen = screenForRoute(base, route)
   return {
@@ -1314,6 +1329,7 @@ export const subscriptions = Subscription.make<
       ),
     ),
   ),
+  appUpdate: Subscription.persistentEntry(appUpdateStream),
   keyboardShortcuts: Subscription.persistentEntry(
     Dom.streamFromEventFilterMap({
       target: document,
@@ -1399,7 +1415,18 @@ const onlineView = (
   })
 }
 
-export const view = (model: Model, h: HtmlBuilder<Message>): Document =>
+export const view = (model: Model, h: HtmlBuilder<Message>): Document => {
+  const page = screenView(model, h)
+  return {
+    ...page,
+    body: h.div(
+      [h.Class('app-shell')],
+      [page.body, appUpdateView(model.isUpdateReady, h)],
+    ),
+  }
+}
+
+const screenView = (model: Model, h: HtmlBuilder<Message>): Document =>
   Screen.match<Document>(model.screen, {
     Home: ({ home }) => ({
       title: 'All Aboard',

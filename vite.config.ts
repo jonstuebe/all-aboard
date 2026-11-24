@@ -22,8 +22,26 @@ const siteUrl = (): Plugin => {
   }
 }
 
+// NOTE: Each build gets an id, baked into the bundle as __BUILD_ID__ and
+// written to /version.json; an open app compares the two to offer a reload
+// (src/appUpdate.ts).
+const BUILD_ID = `${Date.now().toString(36)}`
+
+const buildVersion = (): Plugin => ({
+  name: 'build-version',
+  apply: 'build',
+  config: () => ({ define: { __BUILD_ID__: JSON.stringify(BUILD_ID) } }),
+  generateBundle() {
+    this.emitFile({
+      type: 'asset',
+      fileName: 'version.json',
+      source: JSON.stringify({ id: BUILD_ID }),
+    })
+  },
+})
+
 export default defineConfig({
-  plugins: [tailwindcss(), foldkit(), siteUrl()],
+  plugins: [tailwindcss(), foldkit(), siteUrl(), buildVersion()],
   optimizeDeps: {
     entries: ['src/entry.ts'],
   },

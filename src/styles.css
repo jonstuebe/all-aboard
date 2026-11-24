@@ -3525,3 +3525,84 @@ button.card.deck:hover:not(:disabled) {
     transform: none;
   }
 }
+
+/* NOTE: The app-update banner (src/appUpdate.ts). The shell wrapper adds no box
+   of its own, so every screen lays out as before. */
+.app-shell {
+  display: contents;
+}
+
+.update-toast {
+  position: fixed;
+  z-index: 60;
+  left: 50%;
+  bottom: max(16px, calc(env(safe-area-inset-bottom, 0px) + 8px));
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  padding: 10px 10px 10px 18px;
+  border: 1px solid var(--brass-dark);
+  border-radius: 14px;
+  background: linear-gradient(var(--paper-light), var(--paper));
+  color: var(--brass-ink);
+  box-shadow:
+    0 2px 0 var(--brass-dark),
+    0 12px 28px rgb(0 0 0 / 0.45);
+  transform: translateX(-50%);
+  animation: update-toast-in 320ms cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+
+.update-toast-text {
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.update-toast-reload {
+  flex: none;
+}
+
+.update-toast-dismiss {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 1.4rem;
+  line-height: 1;
+  opacity: 0.6;
+  cursor: pointer;
+}
+
+@keyframes update-toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 24px);
+  }
+}
+
+/* Sideways phones: sit over the map's corner, clear of the side column. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .update-toast {
+    left: max(16px, env(safe-area-inset-left, 0px));
+    transform: none;
+    animation-name: update-toast-in-side;
+  }
+}
+
+@keyframes update-toast-in-side {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .update-toast {
+    animation: none;
+  }
+}

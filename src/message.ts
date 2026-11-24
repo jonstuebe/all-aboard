@@ -43,6 +43,12 @@ export const Message = defineMessageUnion({
   CompletedDeleteGame: { maybeReason: Schema.Option(Schema.String) },
   TickedClock: { now: Schema.Number },
 
+  // APP UPDATE
+  FoundAppUpdate: {},
+  ClickedReloadApp: {},
+  CompletedReloadApp: {},
+  DismissedAppUpdate: {},
+
   // CONFIRM DIALOG
   CompletedShowConfirmDialog: {},
   CompletedCloseConfirmDialog: {},
