@@ -43,7 +43,7 @@ export const CARDS_PER_COLOR = 8
 export const WILD_CARDS = 6
 export const STARTING_HAND_SIZE = 4
 export const MARKET_SIZE = 5
-export const STARTING_TRAINS = 14
+export const STARTING_TRAINS = 20
 export const FINAL_ROUND_TRAIN_THRESHOLD = 2
 // NOTE: At the start everyone is dealt 3 tickets and keeps at least 2. A
 // ticket draw mid-game shows 3 and keeps at least 1. Whatever isn't kept goes
